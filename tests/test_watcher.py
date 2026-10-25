@@ -4,7 +4,7 @@ from pw.watcher import FAILS_BEFORE_ALERT, check
 
 def ship(sid, name, price=10000, available=True, limited=False, level="high"):
     return {"id": sid, "name": name, "url": f"https://example/{sid}", "image": "", "category": "Standalone Ships",
-            "price": price, "list_price": price, "available": available, "limited": limited, "level": level}
+            "price": price, "list_price": price, "available": available, "limited": limited, "level": level, "qty": 0}
 
 
 BASE = [ship("1", "Carrack", 60000), ship("2", "Gladius", 9000), ship("3", "Arrow", 7500)]

@@ -21,7 +21,7 @@ QUERY = """query GetBrowseListingQuery($query: SearchQuery) {
       resources {
         id name url
         media { thumbnail { storeSmall } }
-        ... on TyItem { price { amount discounted } stock { available show level unlimited } }
+        ... on TyItem { price { amount discounted } stock { available show level unlimited qty backOrder } }
       }
       totalCount
     }
@@ -90,4 +90,5 @@ def _item(r, category):
         "available": bool(stock.get("available", True)),
         "limited": not stock.get("unlimited", True),
         "level": stock.get("level") or "",
+        "qty": stock.get("qty"),  # undocumented; 0 for unlimited ships. Recorded to learn what it means for limited ones
     }

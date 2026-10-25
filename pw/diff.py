@@ -19,7 +19,7 @@ def diff(known, seen):
     for sid, item in seen.items():
         old = known.get(sid)
         fields = {k: item[k] for k in ("name", "url", "image", "category", "price", "list_price", "available",
-                                        "limited", "level")}
+                                        "limited", "level", "qty")}
         fields.update(listed=True, misses=0)
         if old is None:
             events.append(_ev("new", item))
@@ -50,7 +50,7 @@ def diff(known, seen):
 
 def _ev(kind, item, **extra):
     e = {"kind": kind, "id": item.get("id"), "name": item["name"], "url": item["url"], "image": item["image"],
-         "price": item["price"], "limited": item["limited"], "level": item["level"]}
+         "price": item["price"], "limited": item["limited"], "level": item["level"], "qty": item.get("qty")}
     e.update(extra)
     return e
 

@@ -24,6 +24,9 @@ def connect(path):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.executescript(SCHEMA)
+    cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
+    if "qty" not in cols:
+        db.execute("ALTER TABLE ships ADD COLUMN qty INTEGER")
     return db
 
 
@@ -41,10 +44,10 @@ def save(db, updates, events, now=None):
             exists = db.execute("SELECT listed FROM ships WHERE id=?", (sid,)).fetchone()
             if exists is None:
                 db.execute("""INSERT INTO ships (id, name, url, image, category, price, list_price, available, limited,
-                              level, listed, misses, first_seen, last_seen, listed_since)
-                              VALUES (?,?,?,?,?,?,?,?,?,?,1,0,?,?,?)""",
+                              level, qty, listed, misses, first_seen, last_seen, listed_since)
+                              VALUES (?,?,?,?,?,?,?,?,?,?,?,1,0,?,?,?)""",
                            (sid, f["name"], f["url"], f["image"], f["category"], f["price"], f["list_price"],
-                            f["available"], f["limited"], f["level"], now, now, now))
+                            f["available"], f["limited"], f["level"], f.get("qty"), now, now, now))
                 continue
             if f.get("listed") and not exists["listed"]:
                 f = {**f, "listed_since": now}

@@ -17,6 +17,7 @@ import urllib.request
 from aiohttp import web
 
 from . import cargo as cargo_grids
+from . import release
 from .catalog import STATUS, info, match_key
 from .commands import norm
 from .store import USER_AGENT
@@ -76,8 +77,11 @@ def build(db, now=None):
         if not ship["img"]:
             ship["img"] = s["image"]
     grids = cargo_grids.lookup(db)
+    released = release.lookup(db)
     out = []
     for ship in ships.values():
+        if released.get(ship["name"]) and ship["status"] in ("", "Flight ready"):
+            ship["released"] = released[ship["name"]]
         g = cargo_grids.find(grids, ship["name"])
         if g:
             ship["grid"] = {"scu": g["scu"], "boxes": g["boxes"], "viewer": g["viewer"], "concept": g["concept"]}

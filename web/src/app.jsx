@@ -11,7 +11,16 @@ const FILTERS = [
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
 ];
 const SIZES = ["Vehicle", "Snub", "Small", "Medium", "Large", "Capital"];
+// Release patch '3.24.3' -> comparable numbers; ships without one (concepts, unknown) sort last.
+const rel = (s) => (s.released ? s.released.split(".").map(Number) : null);
+const byRelease = (a, b) => {
+  const x = rel(a), y = rel(b);
+  if (!x || !y) return (x ? -1 : 0) + (y ? 1 : 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((y[i] || 0) !== (x[i] || 0)) return (y[i] || 0) - (x[i] || 0);
+  return 0;
+};
 const SORTS = {
+  released: ["Newest release first", byRelease],
   "price-desc": ["Price, high to low", (a, b) => price(b) - price(a)],
   "price-asc": ["Price, low to high", (a, b) => (price(a) || 1e12) - (price(b) || 1e12)],
   name: ["Name", () => 0],
@@ -150,7 +159,7 @@ export function App({ data: first }) {
         <h1>
           <b>{inStore.length} ships</b> in the store.{" "}
           <span>
-            {counts.warbond} with a warbond price, {counts.anniversary} 10 Year editions, {counts.sale ? `${counts.sale} discounted` : "no discounts right now"}
+            {counts.warbond} with a warbond price, {counts.anniversary} with a 10 Year edition, {counts.sale ? `${counts.sale} discounted` : "no discounts right now"}
             {counts.limited ? `, ${counts.limited} limited` : ""}.
           </span>
         </h1>
@@ -253,7 +262,8 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
   useEffect(() => { if (open && location.hash === `#${anchor}`) document.getElementById(anchor)?.scrollIntoView(); }, []);
-  const specs = [s.maker, s.role, s.size, s.crew && `crew ${s.crew}`, s.cargo ? `${s.cargo.toLocaleString("en-US")} SCU` : ""]
+  const specs = [s.maker, s.role, s.size, s.crew && `crew ${s.crew}`, s.cargo ? `${s.cargo.toLocaleString("en-US")} SCU` : "",
+    s.released ? (s.released === "0" ? "in game since the hangar module" : `in game since ${s.released}`) : ""]
     .filter(Boolean).join(" · ");
   const notFlyable = s.status && s.status !== "Flight ready";
   const upgrade = from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;

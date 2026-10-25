@@ -72,6 +72,7 @@ button, input, select { font: inherit; color: inherit; }
 .chip .n { font: 12px var(--mono); opacity: .8; }
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .selects { display: flex; flex-wrap: wrap; gap: 8px; }
+#from { max-width: 17rem; }
 .rate { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .rate input { width: 12ch; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: 13px var(--mono); text-align: right; }
 .selects select { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 13px; max-width: 100%; }

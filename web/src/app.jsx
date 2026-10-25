@@ -101,9 +101,14 @@ export function App({ data }) {
     setRate(n);
     try { localStorage.setItem(RATE_KEY, String(n)); } catch {}
   };
-  const upgradable = useMemo(() => inStore.filter((s) => s.editions.some((e) => e.inStore && e.label === "Standard"))
-    .map((s) => [s.key, s.name, s.editions.find((e) => e.inStore && e.label === "Standard").price])
-    .sort((a, b) => a[2] - b[2]), [inStore]);
+  // Ships you might own, valued at their standard price: in the store now, else the latest standard price seen in the
+  // pledge or upgrade store (the wiki's history). Upgrades go from that value to a target's standard price.
+  const upgradable = useMemo(() => ships.map((s) => {
+    const std = s.editions.find((e) => e.inStore && e.label === "Standard");
+    if (std) return [s.key, s.name, std.price, ""];
+    const last = (s.history || []).filter((h) => !h[2]).pop();
+    return last ? [s.key, s.name, last[1] * 100, last[0]] : null;
+  }).filter(Boolean).sort((a, b) => a[2] - b[2] || a[1].localeCompare(b[1])), [ships]);
   const fromPrice = (upgradable.find(([k]) => k === st.from) || [])[2] || 0;
 
   const toggle = (k) => set({ f: st.f.includes(k) ? st.f.filter((x) => x !== k) : [...st.f, k] });
@@ -179,7 +184,14 @@ export function App({ data }) {
               </select>
               <select id="from" aria-label="Upgrade from a ship you own" value={st.from} onChange={(e) => set({ from: e.currentTarget.value })}>
                 <option value="">Upgrade from…</option>
-                {upgradable.map(([k, name, p]) => <option value={k}>{`${name} (${money(p)})`}</option>)}
+                <optgroup label="In the store now">
+                  {upgradable.filter((u) => !u[3]).map(([k, name, p]) => <option value={k}>{`${name} (${money(p)})`}</option>)}
+                </optgroup>
+                <optgroup label="Not in the store (last standard price)">
+                  {upgradable.filter((u) => u[3]).map(([k, name, p, d]) => (
+                    <option value={k}>{`${name} (${money(p)}, ${new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })})`}</option>
+                  ))}
+                </optgroup>
               </select>
               <label class="rate" for="rate">
                 I earn

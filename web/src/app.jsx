@@ -217,7 +217,7 @@ export function App({ data }) {
           (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>)
           {data.gameVersion ? `, game version ${data.gameVersion}` : ""}. Your aUEC-an-hour figure stays in your browser.
         </p>
-        <p>No accounts, no cookies, no tracking. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/ships.json">The data as JSON</a>.</p>
+        <p>No accounts, no cookies, no tracking. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://github.com/DieLaughing/pledgewatch" target="_blank" rel="noopener">Source on GitHub</a> (AGPL) · <a href="/ships.json">The data as JSON</a>.</p>
       </footer>
     </div>
   );

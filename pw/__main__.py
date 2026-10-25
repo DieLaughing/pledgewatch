@@ -19,19 +19,43 @@ path = os.path.join(os.environ.get("PW_DATA", "data"), "pledgewatch.db")
 os.makedirs(os.path.dirname(path), exist_ok=True)
 
 
+async def lead(site):
+    """During a deploy two copies run for a few seconds: both serve the website, but only the one holding this lock
+    checks the store and runs the bots, so nothing is posted or answered twice. The lock is released when its holder
+    exits, so the new copy takes over as soon as the old one stops."""
+    import fcntl
+    lock = open(os.path.join(os.path.dirname(path), "leader.lock"), "w")
+    waited = 0
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if waited == 0:
+                logging.info("another copy is running the bots; serving the website until it stops")
+            await asyncio.sleep(2)
+            waited += 2
+            if site and waited % 60 == 0:
+                site.refresh()
+    main.lock = lock  # held for the life of the process
+    if waited:
+        logging.info("took over the bots after %ds", waited)
+
+
 async def main():
     env = os.environ
     db = store_db.connect(path)  # for command replies, on this event loop's thread
     servers.seed(db, env)
     apps = apps_from_env()
-    after = None
+    after = site = None
     dist = env.get("PW_WEB", os.path.join(os.path.dirname(__file__), "..", "web", "dist"))
     if os.path.exists(os.path.join(dist, "index.html")):
         from .site import Site, serve
         site = Site(path, dist)
         site.refresh()
-        await serve(site, int(env.get("PW_PORT", "8794")))
+        await serve(site, int(env.get("PW_PORT", "8794")), env.get("PW_HOST", "0.0.0.0"))
         after = site.refresh
+    await lead(site)
     tasks = [run(path, apps, after)]
     if env.get("DISCORD_TOKEN") and env.get("DISCORD_GUILD_ID"):
         from .bots import discord_client

@@ -66,7 +66,9 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirement
 cd web && npm install && npm run build  # the website (Preact + Vite)
 ```
 
-`deploy.sh` is the maintainer's build-on-the-server script; it reads `HOST` and `COMPOSE_DIR` from a `deploy.env`.
+`deploy.sh` is the maintainer's build-on-the-server script (settings in a `deploy.env`: `HOST`, `COMPOSE_DIR`, `DATA_DIR`,
+`ENV_FILE`). It swaps versions without a gap: a temporary copy listens on the same port (host network, `SO_REUSEPORT`)
+while the main container is recreated, and a lock in the data folder lets only one copy run the store checks and bots.
 
 ## How it works
 

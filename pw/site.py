@@ -239,7 +239,8 @@ class Site:
     def _send(self, request, body, gz, ctype):
         if request.headers.get("If-None-Match") == self.etag:
             return web.Response(status=304, headers={"ETag": self.etag})
-        headers = {"Content-Type": ctype, "Cache-Control": "public, max-age=60, stale-while-revalidate=600",
+        headers = {"Content-Type": ctype,
+                   "Cache-Control": "public, max-age=60, stale-while-revalidate=600, stale-if-error=86400",
                    "ETag": self.etag, "Vary": "Accept-Encoding"}
         if "gzip" in request.headers.get("Accept-Encoding", ""):
             headers["Content-Encoding"] = "gzip"
@@ -318,8 +319,9 @@ async def _security_headers(request, response):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
 
 
-async def serve(site, port):
+async def serve(site, port, host="0.0.0.0"):
     runner = web.AppRunner(site.app(), access_log=None)
     await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", port).start()
+    # reuse_port lets a new copy start listening before the old one stops, so a deploy never leaves a gap.
+    await web.TCPSite(runner, host, port, reuse_port=True).start()
     log.info("site on :%d", port)

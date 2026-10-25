@@ -15,8 +15,9 @@ const SORTS = {
   "price-desc": ["Price, high to low", (a, b) => price(b) - price(a)],
   "price-asc": ["Price, low to high", (a, b) => (price(a) || 1e12) - (price(b) || 1e12)],
   name: ["Name", () => 0],
-  size: ["Size", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
+  size: ["Size, largest first", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
   game: ["In-game price, low to high", (a, b) => (low(a.buy) || 1e15) - (low(b.buy) || 1e15)],
+  "game-desc": ["In-game price, high to low", (a, b) => (low(b.buy) || -1) - (low(a.buy) || -1)],
 };
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";

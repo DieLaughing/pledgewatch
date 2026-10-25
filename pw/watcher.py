@@ -60,8 +60,9 @@ def tick(db, apps):
     flush(db, apps)
 
 
-async def run(path, apps):
-    """Check the store every INTERVAL seconds. The blocking work runs in a thread so the bots stay responsive."""
+async def run(path, apps, after=None):
+    """Check the store every INTERVAL seconds. The blocking work runs in a thread so the bots stay responsive.
+    `after` runs on the event loop after each check (the website rebuilds its page there)."""
     import asyncio
     db = store_db.connect(path, check_same_thread=False)  # only ever used by one tick at a time
     log.info("watching the RSI store every %ds, posting to %s", INTERVAL, ", ".join(a.name for a in apps) or "nowhere")
@@ -69,6 +70,8 @@ async def run(path, apps):
         started = time.monotonic()
         try:
             await asyncio.to_thread(tick, db, apps)
+            if after:
+                after()
         except Exception:
             log.exception("check crashed")
         await asyncio.sleep(max(30, INTERVAL - (time.monotonic() - started)))

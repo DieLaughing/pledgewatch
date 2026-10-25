@@ -3,3 +3,5 @@ data/
 __pycache__/
 .pytest_cache/
 *.env
+web/node_modules/
+web/dist/

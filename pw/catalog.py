@@ -39,7 +39,7 @@ def refresh(db, now=None, force=False):
         return
     with db:
         db.execute("DELETE FROM catalog")
-        db.executemany("INSERT OR REPLACE INTO catalog VALUES (?,?,?,?,?,?,?)", ships)
+        db.executemany("INSERT OR REPLACE INTO catalog VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ships)
         db.execute("DELETE FROM loaners")
         db.executemany("INSERT OR REPLACE INTO loaners VALUES (?,?,?)",
                        [(ship, json.dumps(keys), loan) for ship, keys, loan in loaners])
@@ -50,9 +50,20 @@ def refresh(db, now=None, force=False):
 
 def _ship(s):
     name = " ".join(s["name"].split())
-    maker = (s.get("manufacturer") or {}).get("name", "")
+    maker = s.get("manufacturer") or {}
     url = "https://robertsspaceindustries.com" + s["url"] if s.get("url", "").startswith("/") else ""
-    return (name, norm(name), maker, s.get("production_status") or "", s.get("focus") or "", s.get("size") or "", url)
+    media = (s.get("media") or [{}])[0] or {}
+    image = (media.get("images") or {}).get("store_small") or ""
+    return (name, norm(name), maker.get("name", ""), maker.get("code", ""), s.get("production_status") or "",
+            s.get("focus") or "", s.get("type") or "", s.get("size") or "", _num(s.get("min_crew")),
+            _num(s.get("max_crew")), _num(s.get("cargocapacity")), _num(s.get("length")), image, url)
+
+
+def _num(v):
+    try:
+        return float(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_loaners(body):
@@ -93,10 +104,20 @@ def base_key(name):
     return norm(name)
 
 
+def match_key(keys, name):
+    """The Ship Matrix key for a store name. Falls back to the longest matrix name the store name starts with, so
+    'PTV Buggy' finds 'PTV' and 'Ursa Rover' finds 'Ursa'."""
+    key = base_key(name)
+    if key in keys:
+        return key
+    starts = [k for k in keys if key.startswith(k + " ")]
+    return max(starts, key=len) if starts else key
+
+
 def info(db, name):
     """Status and loaners for a store ship name, or {} if we can't tell."""
     try:
-        key = base_key(name)
+        key = match_key({r[0] for r in db.execute("SELECT key FROM catalog")}, name)
         row = db.execute("SELECT status FROM catalog WHERE key=?", (key,)).fetchone()
         result = {"status": STATUS.get(row[0], row[0])} if row and row[0] else {}
         for ship, keys, loan in db.execute("SELECT ship, keys, loaners FROM loaners"):

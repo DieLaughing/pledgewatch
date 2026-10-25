@@ -22,7 +22,15 @@ if cmd != ["hello"]:
 async def main():
     env = os.environ
     db = store_db.connect(path)  # for command replies, on this event loop's thread
-    tasks = [run(path, apps_from_env())]
+    after = None
+    dist = env.get("PW_WEB", os.path.join(os.path.dirname(__file__), "..", "web", "dist"))
+    if os.path.exists(os.path.join(dist, "index.html")):
+        from .site import Site, serve
+        site = Site(path, dist)
+        site.refresh()
+        await serve(site, int(env.get("PW_PORT", "8794")))
+        after = site.refresh
+    tasks = [run(path, apps_from_env(), after)]
     if env.get("DISCORD_TOKEN") and env.get("DISCORD_GUILD_ID"):
         from .bots import discord_client
         tasks.append(discord_client(db, env["DISCORD_GUILD_ID"]).start(env["DISCORD_TOKEN"]))

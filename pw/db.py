@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS watches (
   PRIMARY KEY (platform, user_id, query)
 );
 CREATE TABLE IF NOT EXISTS catalog (
-  name TEXT PRIMARY KEY, key TEXT NOT NULL, maker TEXT, status TEXT, focus TEXT, size TEXT, url TEXT
+  name TEXT PRIMARY KEY, key TEXT NOT NULL, maker TEXT, maker_code TEXT, status TEXT, focus TEXT, type TEXT,
+  size TEXT, min_crew INTEGER, max_crew INTEGER, cargo REAL, length REAL, image TEXT, url TEXT
 );
 CREATE TABLE IF NOT EXISTS loaners (ship TEXT PRIMARY KEY, keys TEXT NOT NULL, loaners TEXT NOT NULL);
 """
@@ -31,6 +32,9 @@ def connect(path, check_same_thread=True):
     db = sqlite3.connect(path, check_same_thread=check_same_thread)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
+    cat = {r["name"] for r in db.execute("PRAGMA table_info(catalog)")}
+    if cat and "image" not in cat:  # older, smaller ship list: it's rebuilt from RSI on the next check
+        db.executescript("DROP TABLE catalog; DELETE FROM state WHERE key='catalog_at';")
     db.executescript(SCHEMA)
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
     if "qty" not in cols:

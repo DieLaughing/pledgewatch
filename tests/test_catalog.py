@@ -20,7 +20,7 @@ def setup(tmp_path):
              for n, st in [("Idris-P", "flight-ready"), ("Idris-M", "flight-ready"), ("Arrastra", "in-concept"),
                            ("Kraken", "in-concept"), ("Carrack", "flight-ready")]]
     with db:
-        db.executemany("INSERT INTO catalog VALUES (?,?,?,?,?,?,?)", ships)
+        db.executemany("INSERT INTO catalog VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ships)
         db.executemany("INSERT INTO loaners VALUES (?,?,?)",
                        [(s, json.dumps(k), l) for s, k, l in catalog.parse_loaners(BODY)])
     return db

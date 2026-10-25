@@ -158,7 +158,44 @@ start with <code>!</code> in its own channel), and it never stores message conte
 <li><code>/alerts off</code> stops alerts in a server; removing the bot from a server deletes that server's settings
 and every watch made in it.</li>
 </ul>
-<p>Nothing is sold or shared. Questions: open an issue or message the owner in the InPints Discord.</p>
+<p>Nothing is sold or shared. See also the <a href="/terms">terms</a>. Questions: message the owner in the InPints
+Discord.</p>
+</body></html>"""
+
+
+TERMS = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Terms · Pledge Watch</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="color-scheme" content="light dark">
+<style>body{max-width:42rem;margin:0 auto;padding:32px 16px;font:16px/1.6 system-ui,sans-serif}
+h1{font-size:26px}h2{font-size:18px;margin-top:28px}a{color:#b26b00}code{font-size:14px}</style></head><body>
+<p><a href="/">← Pledge Watch</a></p>
+<h1>Terms of Service</h1>
+<p>Pledge Watch (this website and its Discord and Fluxer bot) is a free fan project. By using it you agree to these
+terms. Last updated October 25, 2026.</p>
+<h2>Unofficial</h2>
+<p>Pledge Watch is not affiliated with, endorsed by or connected to Cloud Imperium Games or Roberts Space Industries.
+Star Citizen, ship names and images belong to their owners.</p>
+<h2>No guarantees</h2>
+<p>Prices, stock, insurance, in-game prices and other details come from public sources (the RSI pledge store, RSI's
+Ship Matrix and Loaner Ship Matrix, UEX, the Star Citizen Wiki and sc-cargo.space). They can be wrong, incomplete or
+late, and alerts can be delayed or missed. <strong>Always check the RSI store before you buy.</strong> The service is
+provided as is, without warranty of any kind, and may change, pause or stop at any time.</p>
+<h2>Using the bot</h2>
+<ul>
+<li>Server admins choose where alerts go with <code>/alerts setup</code> and can stop them with <code>/alerts off</code>
+or by removing the bot.</li>
+<li>Don't use Pledge Watch to spam, harass or break Discord's, Fluxer's or RSI's rules, and don't try to overload or
+break the service.</li>
+<li>The bot may leave servers, for example when it's at its server limit or a server misuses it.</li>
+</ul>
+<h2>Liability</h2>
+<p>To the extent the law allows, the people running Pledge Watch aren't liable for any loss that comes from using it or
+relying on its information, including pledges bought or missed.</p>
+<h2>Privacy</h2>
+<p>What the bot stores and how to delete it is on the <a href="/privacy">privacy page</a>.</p>
+<h2>Changes</h2>
+<p>These terms may be updated; the date above shows the latest version. Questions: message the owner in the InPints
+Discord.</p>
 </body></html>"""
 
 
@@ -237,6 +274,9 @@ class Site:
     async def privacy(self, request):
         return web.Response(text=PRIVACY, content_type="text/html", headers={"Cache-Control": "public, max-age=3600"})
 
+    async def terms(self, request):
+        return web.Response(text=TERMS, content_type="text/html", headers={"Cache-Control": "public, max-age=3600"})
+
     async def health(self, request):
         return web.Response(text="ok")
 
@@ -247,6 +287,7 @@ class Site:
         app.router.add_get("/img/{id:[0-9a-f]{16}}.jpg", self.image)
         app.router.add_get("/healthz", self.health)
         app.router.add_get("/privacy", self.privacy)
+        app.router.add_get("/terms", self.terms)
         for name in ("favicon.svg", "favicon.ico", "apple-touch-icon.png"):
             app.router.add_get(f"/{name}", self._file(name))
         app.router.add_static("/assets", os.path.join(self.dist, "assets"), append_version=False)

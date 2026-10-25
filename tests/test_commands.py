@@ -76,3 +76,13 @@ def test_fluxer_text_commands(tmp_path):
     assert "Watching **carrack**" in fluxer_reply(db, "/watch carrack", "f1")
     assert "idris" in fluxer_reply(db, "!WATCHING", "f1")
     assert "!watch <ship>" in fluxer_reply(db, "!help", "f1")
+
+
+def test_typos_get_suggestions(tmp_path):
+    db = setup(tmp_path)
+    r = cmd.watch(db, "discord", "u1", "idirs")
+    assert "Did you mean" in r and "Idris-P" in r and "didn't save" in r
+    assert cmd.watching(db, "discord", "u1").startswith("You're not watching")
+    assert "Did you mean **Carrack**" in cmd.store(db, "carack")
+    assert fluxer_reply(db, "!wtach Idris", "f1").startswith("Did you mean `!watch`")
+    assert fluxer_reply(db, "/shrug", "f1") is None and fluxer_reply(db, "!lol", "f1") is None

@@ -1,4 +1,5 @@
 """What /watch, /unwatch, /watching and /store do. Shared by both apps; each returns the reply text."""
+import difflib
 import re
 import time
 
@@ -30,14 +31,17 @@ def watch(db, platform, user, query, now=None):
         return f"You're already watching **{q}**. " + _now_line(db, q)
     if len(mine) >= MAX_WATCHES:
         return f"You're watching {MAX_WATCHES} ships, which is the limit. Remove one with `unwatch` first."
+    unknown = not _ships(db, q) and not _catalog(db, q)
+    if unknown and (dym := _did_you_mean(db, q)):
+        return f"I don't know a ship called **{q}**. {dym} I didn't save it, so try again with the right name."
     with db:
         db.execute("INSERT INTO watches (platform, user_id, query, created) VALUES (?,?,?,?)",
                    (platform, user, q, int(now or time.time())))
     reply = (f"Watching **{q}**. I'll ping you when a ship matching it comes into the public store, restocks, "
              f"runs low or changes price.\n" + _now_line(db, q))
-    if not _ships(db, q) and not _catalog(db, q):
-        reply += ("\nI haven't seen a ship with that name yet, so check the spelling. I match any ship whose name "
-                  "contains it.")
+    if unknown:
+        reply += ("\nI don't know a ship with that name yet, so check the spelling. If it's a ship that hasn't been "
+                  "announced, I'll still catch it when it shows up.")
     return reply
 
 
@@ -75,7 +79,8 @@ def store(db, query=None, now=None):
     known = {norm(s["name"]) for s in ships}
     others = [c for c in _catalog(db, q) if c["key"] not in known]
     if not ships and not others:
-        return (f"I don't know a ship called **{q}**. Check the spelling, or try part of the name.\n{ACCESS_NOTE}")
+        return (f"I don't know a ship called **{q}**. "
+                + (_did_you_mean(db, q) or "Check the spelling, or try part of the name.") + f"\n{ACCESS_NOTE}")
     lines = []
     for s in ships[:8]:
         if s["listed"]:
@@ -130,6 +135,20 @@ def _mine(db, platform, user):
 def _ships(db, q):
     rows = db.execute("SELECT * FROM ships ORDER BY listed DESC, price DESC").fetchall()
     return [r for r in rows if q in norm(r["name"])]
+
+
+def _did_you_mean(db, q):
+    """Close ship names for a typo, matched on whole names and on single words ('idirs' -> Idris-P, Idris-M)."""
+    names_ = {r[0] for r in db.execute("SELECT name FROM catalog UNION SELECT name FROM ships")}
+    by_word = {}
+    for n in names_:
+        for w in [norm(n)] + norm(n).split():
+            by_word.setdefault(w, set()).add(n)
+    close = difflib.get_close_matches(q, list(by_word), n=4, cutoff=0.75)
+    found = sorted({n for w in close for n in by_word[w]}, key=len)[:4]
+    if not found:
+        return ""
+    return "Did you mean " + " or ".join(f"**{n}**" for n in found) + "?"
 
 
 def _catalog(db, q):

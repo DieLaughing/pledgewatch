@@ -1,6 +1,7 @@
 """Listen for commands on Discord (real slash commands) and Fluxer (text commands like !watch; Fluxer bots can't
 register slash commands yet). Both call the same functions in commands.py."""
 import asyncio
+import difflib
 import logging
 import random
 
@@ -76,7 +77,8 @@ def fluxer_reply(db, content, user):
     name, _, arg = content[1:].strip().partition(" ")
     name, arg = name.lower(), arg.strip()
     if name not in FLUXER_COMMANDS:
-        return None
+        close = difflib.get_close_matches(name, ["watch", "unwatch", "watching", "store"], n=1, cutoff=0.75)
+        return f"Did you mean `!{close[0]}`? `!help` lists everything." if close and content[0] == "!" else None
     p = "fluxer"
     if name == "watch":
         return cmd.watch(db, p, user, arg) if arg else "Which ship? Like `!watch Idris`."

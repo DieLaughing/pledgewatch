@@ -21,6 +21,7 @@ WIKI = "https://api.star-citizen.wiki/api/v2/vehicles?page%5Bsize%5D=50&page%5Bn
 UEX = "https://api.uexcorp.space/2.0/"
 REFRESH = 86400
 PAUSE = 1.5  # between wiki pages; each is ~3 MB
+KEEP = ("id", "uuid", "name", "shipmatrix_name", "insurance", "skus", "version")
 
 
 def _get(url):
@@ -38,7 +39,9 @@ def refresh(db, now=None, force=False):
         wiki, page = [], 1
         while True:
             d = _get(WIKI.format(page))
-            wiki += d["data"]
+            # Each vehicle has ~77 fields (~60 KB); keep the few we use so a refresh stays well inside the memory cap.
+            wiki += [{k: v.get(k) for k in KEEP} for v in d["data"]]
+            del d["data"]
             if page >= d["meta"]["last_page"]:
                 break
             page += 1

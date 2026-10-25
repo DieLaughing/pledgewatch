@@ -5,3 +5,4 @@ __pycache__/
 *.env
 web/node_modules/
 web/dist/
+.cloudflare/

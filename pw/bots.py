@@ -120,9 +120,32 @@ def discord_client(db, home_guild, poster=None):
     tree.add_command(alerts)
 
     @client.event
+    async def on_ready():
+        servers.set_count(db, len(client.guilds))
+
+    @client.event
+    async def on_guild_join(guild):
+        if servers.over_cap(len(client.guilds), str(guild.id), home_guild):
+            # Say why before leaving: the system channel, else the first channel it may post in.
+            chans = ([guild.system_channel] if guild.system_channel else []) + list(guild.text_channels)
+            for ch in chans:
+                if ch.permissions_for(guild.me).send_messages:
+                    try:
+                        await ch.send(servers.FULL_NOTE.format(cap=servers.MAX_SERVERS))
+                    except discord.HTTPException:
+                        continue
+                    break
+            await guild.leave()
+            log.info("discord: at the %d-server cap, left a new server", servers.MAX_SERVERS)
+            return
+        servers.set_count(db, len(client.guilds))
+        log.info("discord: added to a server (%d now)", len(client.guilds))
+
+    @client.event
     async def on_guild_remove(guild):
         servers.forget(db, p, str(guild.id))
-        log.info("discord: removed from a server; its settings and watches are deleted")
+        servers.set_count(db, len(client.guilds))
+        log.info("discord: removed from a server; its settings and watches are deleted (%d now)", len(client.guilds))
 
     async def setup_hook():
         # Commands are global so every server gets them. Older versions registered them on the home server only;

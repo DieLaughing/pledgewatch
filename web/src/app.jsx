@@ -139,7 +139,9 @@ export function App({ data }) {
             <b>Store alerts in your Discord</b>
             <span>Pledge Watch posts when ships come in, sell out or change price, and pings people for the ships they <code>/watch</code>. After adding it, an admin runs <code>/alerts setup</code> to pick the channel.</span>
           </div>
-          <a class="btn" href={data.invite} target="_blank" rel="noopener">Add to Discord</a>
+          {data.inviteFull
+            ? <span class="full">Full for now: the bot is at its server limit.</span>
+            : <a class="btn" href={data.invite} target="_blank" rel="noopener">Add to Discord</a>}
         </aside>
       ) : null}
 

@@ -116,3 +116,11 @@ def test_leaving_a_server_forgets_it(tmp_path):
     cmd.watch(db, "discord", "u1", "idris", guild="other")
     servers.forget(db, "discord", "other")
     assert servers.get(db, "discord", "other") is None and cmd.watching(db, "discord", "u1").startswith("You're not")
+
+
+def test_server_cap():
+    # 75 other servers is fine; the 76th gets left. The home server never counts and is never left.
+    assert not servers.over_cap(76, "new", "home", cap=75)
+    assert servers.over_cap(77, "new", "home", cap=75)
+    assert not servers.over_cap(500, "home", "home", cap=75)
+    assert servers.over_cap(76, "new", "", cap=75)

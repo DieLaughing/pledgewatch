@@ -3,7 +3,28 @@
 Servers set themselves up with /alerts setup. The owner's own Discord server and Fluxer community come from the
 env file and are added on start, so they never need the command.
 """
+import json
+import os
 import time
+
+# Most Discord servers the bot stays in. Discord asks for identity verification at 75 and blocks new servers at 100
+# until it's done, so stay just under. Set PW_MAX_SERVERS to change it.
+MAX_SERVERS = int(os.environ.get("PW_MAX_SERVERS", "75"))
+FULL_NOTE = ("Thanks for adding Pledge Watch! It's at its limit of {cap} servers right now, so I've left this one. "
+             "The website still works for everyone: https://pledgewatch.inpints.com")
+
+
+def over_cap(guild_count, guild, home, cap=MAX_SERVERS):
+    """Should the bot leave `guild` now that it's in `guild_count` servers? The home server never counts."""
+    others = guild_count - (1 if home else 0)
+    return guild != home and others > cap
+
+
+def set_count(db, count):
+    """How many Discord servers the bot is in, for the website and HQ."""
+    with db:
+        db.execute("INSERT INTO state (key, value) VALUES ('discord_servers', ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(count),))
 
 
 def seed(db, env):

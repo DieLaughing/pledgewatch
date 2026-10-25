@@ -177,6 +177,10 @@ class Site:
         """Rebuild the page from the database. Called at start and after every store check."""
         data = build(self.db)
         app_id = os.environ.get("DISCORD_APP_ID", "")
+        from .servers import MAX_SERVERS
+        count = self.db.execute("SELECT value FROM state WHERE key='discord_servers'").fetchone()
+        others = (json.loads(count[0]) if count else 0) - (1 if os.environ.get("DISCORD_GUILD_ID") else 0)
+        data["inviteFull"] = others >= MAX_SERVERS
         if app_id:
             data["invite"] = (f"https://discord.com/oauth2/authorize?client_id={app_id}&permissions={INVITE_PERMISSIONS}"
                               "&integration_type=0&scope=bot+applications.commands")

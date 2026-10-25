@@ -331,7 +331,7 @@ const WHO = [["pilot", "Pilot"], ["both", "Pilot or gunner"], ["gunner", "Gunner
 const MISSILE = { missile: ["missile", "missiles"], torpedo: ["torpedo", "torpedoes"], bomb: ["bomb", "bombs"] };
 const num = (n) => (n ? n.toLocaleString("en-US") : "–");
 // The three damage figures as one line, for narrow screens where they don't fit as columns.
-const Stats = ({ d }) => (d[0] ? <span class="stats-inline">{num(d[0])} DPS · {num(d[1])} sustained · {num(d[2])} alpha</span> : null);
+const Stats = ({ d }) => (d[0] ? <span class="stats-inline"><b>{num(d[0])}</b> DPS · <b>{num(d[1])}</b> sustained · <b>{num(d[2])}</b> alpha</span> : null);
 
 // Card summary, e.g. "Pilot: 2× S4 + 2 turrets · Gunners: 2 turrets · 7 PDCs".
 function armsLine(w) {

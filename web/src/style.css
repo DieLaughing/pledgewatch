@@ -125,10 +125,11 @@ button, input, select { font: inherit; color: inherit; }
 @media (max-width: 560px) {
   .loadout thead, .loadout .mount, .loadout .num { display: none; }
   .loadout .mount-inline { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
-  .loadout .stats-inline { display: block; margin-top: 4px; font: 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); }
+  .loadout .stats-inline { display: block; margin-top: 3px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .loadout .stats-inline b { color: var(--fg); font-weight: 600; }
   .loadout th, .loadout td { padding-right: 0; }
   .loadout tfoot th { font-size: 13px; }
-  .loadout tfoot .stats-inline { font-weight: 600; margin-top: 2px; }
+  .loadout tfoot .stats-inline { font-weight: 400; margin-top: 2px; }
 }
 .arms-facts { margin-top: 14px; }
 
@@ -196,12 +197,21 @@ button, input, select { font: inherit; color: inherit; }
 .ed.soldout .state { color: var(--bad); }
 .notin { margin: 0; color: var(--muted); font-size: 13px; text-align: right; }
 
+/* Phones: the picture sits beside the name and specs; everything else runs the full width below it, so lines
+   don't wrap in a narrow column. Prices share the width evenly, then the Details link and the details. */
 @media (max-width: 720px) {
-  .ship { grid-template-columns: 112px minmax(0, 1fr); align-items: start; }
+  .ship { grid-template-columns: 112px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
   .ship img, .noimg { width: 112px; height: 63px; }
-  .ship > .buy { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
-  .ship > .details { grid-row: 3; }
-  .notin { text-align: left; }
+  .ship > img, .ship > .noimg { grid-row: 1 / span 2; }
+  .ship > .info { display: contents; }
+  .info > h2 { grid-column: 2; grid-row: 1; }
+  .info > .specs { grid-column: 2; grid-row: 2; margin: 0; }
+  .info > .arms, .info > .status { grid-column: 1 / -1; margin: 0; }
+  .ship > .buy { grid-column: 1 / -1; grid-row: auto; justify-content: stretch; }
+  .ship > .buy .ed { flex: 1 1 0; min-width: 0; }
+  .info > .grid-toggle { grid-column: 1 / -1; justify-self: start; order: 1; margin: 0; }
+  .ship > .details { grid-row: auto; order: 2; }
+  .notin { text-align: left; flex-basis: 100%; }
 }
 
 .changes { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }

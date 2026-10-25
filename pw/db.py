@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS watches (
 );
 CREATE TABLE IF NOT EXISTS catalog (
   name TEXT PRIMARY KEY, key TEXT NOT NULL, maker TEXT, maker_code TEXT, status TEXT, focus TEXT, type TEXT,
-  size TEXT, min_crew INTEGER, max_crew INTEGER, cargo REAL, length REAL, image TEXT, url TEXT
+  size TEXT, min_crew INTEGER, max_crew INTEGER, cargo REAL, length REAL, image TEXT, url TEXT, mid TEXT
 );
 CREATE TABLE IF NOT EXISTS loaners (ship TEXT PRIMARY KEY, keys TEXT NOT NULL, loaners TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cargo (
@@ -36,12 +36,14 @@ def connect(path, check_same_thread=True):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     cat = {r["name"] for r in db.execute("PRAGMA table_info(catalog)")}
-    if cat and "image" not in cat:  # older, smaller ship list: it's rebuilt from RSI on the next check
+    if cat and "mid" not in cat:  # older, smaller ship list: it's rebuilt from RSI on the next check
         db.executescript("DROP TABLE catalog; DELETE FROM state WHERE key='catalog_at';")
     db.executescript(SCHEMA)
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
-    if "qty" not in cols:
-        db.execute("ALTER TABLE ships ADD COLUMN qty INTEGER")
+    for col, kind in (("qty", "INTEGER"), ("warbond", "INTEGER"), ("insurance", "TEXT"), ("ship_id", "TEXT"),
+                      ("extras", "TEXT")):
+        if col not in cols:
+            db.execute(f"ALTER TABLE ships ADD COLUMN {col} {kind}")
     return db
 
 
@@ -59,10 +61,11 @@ def save(db, updates, events, now=None):
             exists = db.execute("SELECT listed FROM ships WHERE id=?", (sid,)).fetchone()
             if exists is None:
                 db.execute("""INSERT INTO ships (id, name, url, image, category, price, list_price, available, limited,
-                              level, qty, listed, misses, first_seen, last_seen, listed_since)
-                              VALUES (?,?,?,?,?,?,?,?,?,?,?,1,0,?,?,?)""",
+                              level, qty, warbond, insurance, ship_id, extras, listed, misses, first_seen, last_seen,
+                              listed_since) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?,?)""",
                            (sid, f["name"], f["url"], f["image"], f["category"], f["price"], f["list_price"],
-                            f["available"], f["limited"], f["level"], f.get("qty"), now, now, now))
+                            f["available"], f["limited"], f["level"], f.get("qty"), f.get("warbond"),
+                            f.get("insurance"), f.get("ship_id"), f.get("extras", "[]"), now, now, now))
                 continue
             if f.get("listed") and not exists["listed"]:
                 f = {**f, "listed_since": now}

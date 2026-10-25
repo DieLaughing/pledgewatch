@@ -1,4 +1,5 @@
 """Turn two looks at the store into a list of changes. No I/O here, so it's easy to test."""
+import json
 
 # A ship has to be missing this many checks in a row before we call it gone, so one bad read doesn't cause a false
 # "left the store" followed by a false "back".
@@ -20,6 +21,7 @@ def diff(known, seen):
         old = known.get(sid)
         fields = {k: item[k] for k in ("name", "url", "image", "category", "price", "list_price", "available",
                                         "limited", "level", "qty")}
+        fields.update({k: item.get(k) for k in ("warbond", "insurance", "ship_id")}, extras=json.dumps(item.get("extras") or []))
         fields.update(listed=True, misses=0)
         if old is None:
             events.append(_ev("new", item))

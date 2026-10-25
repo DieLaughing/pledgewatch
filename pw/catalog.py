@@ -69,7 +69,7 @@ def apply(db, ships, loaners, now):
                 events.append({"kind": "loaners", "name": ship, "url": "", "was": loan, "now": ""})
     with db:
         db.execute("DELETE FROM catalog")
-        db.executemany("INSERT OR REPLACE INTO catalog VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ships)
+        db.executemany("INSERT OR REPLACE INTO catalog VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ships)
         db.execute("DELETE FROM loaners")
         db.executemany("INSERT OR REPLACE INTO loaners VALUES (?,?,?)",
                        [(ship, json.dumps(keys), loan) for ship, keys, loan in loaners])
@@ -92,7 +92,7 @@ def _ship(s):
     image = (media.get("images") or {}).get("store_small") or ""
     return (name, norm(name), maker.get("name", ""), maker.get("code", ""), s.get("production_status") or "",
             s.get("focus") or "", s.get("type") or "", s.get("size") or "", _num(s.get("min_crew")),
-            _num(s.get("max_crew")), _num(s.get("cargocapacity")), _num(s.get("length")), image, url)
+            _num(s.get("max_crew")), _num(s.get("cargocapacity")), _num(s.get("length")), image, url, str(s.get("id", "")))
 
 
 def _num(v):

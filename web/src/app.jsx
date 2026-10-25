@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 const FILTERS = [
   ["warbond", "Warbond", (s) => s.editions.some((e) => e.inStore && e.label === "Warbond")],
   ["anniversary", "10 Year", (s) => s.editions.some((e) => e.inStore && e.label === "10 Year")],
+  ["lti", "Lifetime insurance", (s) => s.editions.some((e) => e.inStore && e.insurance === "Lifetime")],
   ["sale", "On sale", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice)],
   ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited)],
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
@@ -218,30 +219,70 @@ function Ship({ ship: s, now }) {
   );
 }
 
-// Top-down floor plan of the cargo grid. Taller stacks are drawn darker. Data: sc-cargo.space (MIT).
+// Top-down floor plan of the cargo grid, every box labelled width × length × height in SCU. Data: sc-cargo.space (MIT).
 function Grid({ grid }) {
-  const b = grid.boxes;
+  // Long ships are drawn lying down so the plan uses the page's width. Labels keep each box's own dimensions.
+  const tall = (() => {
+    const xs = grid.boxes.flatMap((x) => [x[0], x[0] + x[3]]), zs = grid.boxes.flatMap((x) => [x[1], x[1] + x[4]]);
+    return Math.max(...zs) - Math.min(...zs) > (Math.max(...xs) - Math.min(...xs)) * 1.3;
+  })();
+  const b = tall ? grid.boxes.map(([x, z, y, bw, bl, bh]) => [z, x, y, bl, bw, bh, `${bw}×${bl}×${bh}`]) : grid.boxes;
   const minX = Math.min(...b.map((x) => x[0])), minZ = Math.min(...b.map((x) => x[1]));
   const maxX = Math.max(...b.map((x) => x[0] + x[3])), maxZ = Math.max(...b.map((x) => x[1] + x[4]));
   const maxH = Math.max(...b.map((x) => x[2] + x[5]));
   const w = maxX - minX, h = maxZ - minZ, pad = Math.max(w, h) * 0.02;
+  const span = Math.max(w, h);
+  // Label the biggest box in each spot; a smaller box underneath or on top of it would print over its label.
+  const labelled = new Set(), taken = [];
+  [...b.keys()].sort((i, j) => b[j][3] * b[j][4] - b[i][3] * b[i][4]).forEach((i) => {
+    const [x, z, , bw, bl] = b[i];
+    const cx = x + bw / 2, cz = z + bl / 2;
+    if (taken.some(([tx, tz, tw, tl]) => cx > tx && cx < tx + tw && cz > tz && cz < tz + tl)) return;
+    if (taken.some(([tx, tz, tw, tl]) => tx + tw / 2 > x && tx + tw / 2 < x + bw && tz + tl / 2 > z && tz + tl / 2 < z + bl)) return;
+    labelled.add(i);
+    taken.push([x, z, bw, bl]);
+  });
+  // Same-size boxes are grouped in the list: "2 × 6 × 12 × 4 = 576 SCU".
+  const groups = {};
+  for (const [, , , bw, bl, bh] of grid.boxes) {
+    const k = `${bw} × ${bl} × ${bh}`;
+    groups[k] = (groups[k] || 0) + 1;
+  }
+  const rows = Object.entries(groups).sort((a, z) => scu(z[0]) - scu(a[0]));
   return (
     <figure class="grid">
       <svg viewBox={`${minX - pad} ${minZ - pad} ${w + pad * 2} ${h + pad * 2}`} role="img"
         aria-label={`Cargo grid, ${grid.scu} SCU, seen from above`} preserveAspectRatio="xMidYMid meet">
         {b.map(([x, z, y, bw, bl, bh]) => (
-          <rect x={x} y={z} width={bw} height={bl} style={`fill-opacity:${0.25 + 0.6 * ((y + bh) / maxH)}`}>
-            <title>{`${bw} × ${bl} × ${bh} SCU box`}</title>
-          </rect>
+          <rect x={x} y={z} width={bw} height={bl} style={`fill-opacity:${0.35 + 0.5 * ((y + bh) / maxH)}`} />
         ))}
+        {b.map(([x, z, , bw, bl, bh, label], i) => {
+          const size = Math.min(bw, bl) * 0.3;
+          if (!labelled.has(i) || size < span * 0.022) return null;
+          return (
+            <text x={x + bw / 2} y={z + bl / 2} font-size={Math.min(size, span * 0.05)} text-anchor="middle" dominant-baseline="central">
+              {label || `${bw}×${bl}×${bh}`}
+            </text>
+          );
+        })}
       </svg>
       <figcaption>
-        {grid.scu.toLocaleString("en-US")} SCU{grid.concept ? " · concept layout" : ""}, seen from above. Darker = taller stacks.{" "}
-        <a href={grid.viewer} target="_blank" rel="noopener">3D view on sc-cargo.space</a>
+        <ul class="boxes">
+          {rows.map(([dims, n]) => (
+            <li><b>{n} ×</b> {dims} <span>= {(n * scu(dims)).toLocaleString("en-US")} SCU</span></li>
+          ))}
+        </ul>
+        <p>
+          {grid.scu.toLocaleString("en-US")} SCU in total{grid.concept ? " (concept layout)" : ""}. Boxes are width × length × height in SCU,
+          seen from above; darker means stacked higher.{" "}
+          <a href={grid.viewer} target="_blank" rel="noopener">3D view on sc-cargo.space</a>
+        </p>
       </figcaption>
     </figure>
   );
 }
+
+const scu = (dims) => dims.split(" × ").reduce((a, n) => a * Number(n), 1);
 
 function Edition({ e, standard }) {
   const saving = e.label !== "Standard" && standard && e.price < standard.price ? standard.price - e.price : 0;
@@ -254,6 +295,8 @@ function Edition({ e, standard }) {
         {onSale ? <s>{money(e.listPrice)}</s> : null}
         {money(e.price)}
       </span>
+      {e.insurance ? <span class={`ins${e.insurance === "Lifetime" ? " lti" : ""}`}>{e.insurance === "Lifetime" ? "Lifetime insurance" : `${e.insurance} insurance`}</span> : null}
+      {e.paints ? <span class="extra" title={e.includes.join(", ")}>+ {e.paints} paint{e.paints === 1 ? "" : "s"}</span> : null}
       {saving ? <span class="save">save {money(saving)}</span> : null}
       {state ? <span class="state">{state}</span> : null}
     </a>

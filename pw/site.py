@@ -40,7 +40,10 @@ def build(db, now=None):
     """Everything the page shows, as one dict."""
     now = int(now or time.time())
     ships = {}
+    by_id = {}
     for c in db.execute("SELECT * FROM catalog"):
+        if c["mid"]:
+            by_id[c["mid"]] = c["key"]
         ships[c["key"]] = {
             "key": c["key"], "name": c["name"], "maker": c["maker"], "makerCode": c["maker_code"],
             "role": c["focus"], "type": c["type"], "size": (c["size"] or "").title(),
@@ -49,17 +52,20 @@ def build(db, now=None):
         }
     matrix = set(ships)
     for s in db.execute("SELECT * FROM ships ORDER BY price"):
-        key = match_key(matrix, s["name"])
+        key = (s["ship_id"] and by_id.get(s["ship_id"])) or match_key(matrix, s["name"])
         ship = ships.get(key)
         if ship is None:  # in the store but named differently in the Ship Matrix (e.g. PTV Buggy)
             ship = ships[key] = {"key": key, "name": re.sub(r"\s+-\s+.*$", "", s["name"]), "maker": "",
                                  "makerCode": "", "role": "", "type": "", "size": "", "crew": "", "cargo": None,
                                  "length": None, "status": "", "img": s["image"], "rsi": "", "editions": []}
-        ed = edition(s["name"], s["url"] or "")
+        ed = "Warbond" if s["warbond"] else edition(s["name"], s["url"] or "")
+        extras = json.loads(s["extras"] or "[]")
         ship["editions"].append({
             "label": ed, "price": s["price"], "listPrice": s["list_price"], "inStore": bool(s["listed"]),
             "available": bool(s["available"]), "limited": bool(s["limited"]), "level": s["level"] or "",
             "url": s["url"], "since": s["listed_since"], "lastSeen": s["last_seen"],
+            "insurance": s["insurance"] or "", "paints": sum(1 for x in extras if "paint" in x.lower()),
+            "includes": [x for x in extras if "hangar" not in x.lower()],
         })
         if not ship["img"]:
             ship["img"] = s["image"]

@@ -125,7 +125,7 @@ export function App({ data: first }) {
     if (std) return [s.key, s.name, std.price, ""];
     const last = (s.history || []).filter((h) => !h[2]).pop();
     return last ? [s.key, s.name, last[1] * 100, last[0]] : null;
-  }).filter(Boolean).sort((a, b) => a[2] - b[2] || a[1].localeCompare(b[1])), [ships]);
+  }).filter(Boolean).sort((a, b) => a[1].localeCompare(b[1], "en", { numeric: true, sensitivity: "base" })), [ships]);
   const fromPrice = (upgradable.find(([k]) => k === st.from) || [])[2] || 0;
 
   const toggle = (k) => set({ f: st.f.includes(k) ? st.f.filter((x) => x !== k) : [...st.f, k] });
@@ -201,14 +201,9 @@ export function App({ data: first }) {
               </select>
               <select id="from" aria-label="Upgrade from a ship you own" value={st.from} onChange={(e) => set({ from: e.currentTarget.value })}>
                 <option value="">Upgrade from…</option>
-                <optgroup label="In the store now">
-                  {upgradable.filter((u) => !u[3]).map(([k, name, p]) => <option value={k}>{`${name} (${money(p)})`}</option>)}
-                </optgroup>
-                <optgroup label="Not in the store (last standard price)">
-                  {upgradable.filter((u) => u[3]).map(([k, name, p, d]) => (
-                    <option value={k}>{`${name} (${money(p)}, ${new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })})`}</option>
-                  ))}
-                </optgroup>
+                {upgradable.map(([k, name, p, d]) => (
+                  <option value={k}>{d ? `${name} ($${(p / 100).toLocaleString("en-US")}, last seen ${new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })})` : `${name} (${money(p)})`}</option>
+                ))}
               </select>
               <label class="rate" for="rate">
                 I earn

@@ -78,10 +78,13 @@ def build(db, now=None):
             ship["img"] = s["image"]
     grids = cargo_grids.lookup(db)
     released = release.lookup(db)
+    gold = release.gold(db)
     out = []
     for ship in ships.values():
         if released.get(ship["name"]) and ship["status"] in ("", "Flight ready"):
             ship["released"] = released[ship["name"]]
+        if gold.get(ship["name"]):
+            ship["gold"] = gold[ship["name"]]
         g = cargo_grids.find(grids, ship["name"])
         if g:
             ship["grid"] = {"scu": g["scu"], "boxes": g["boxes"], "viewer": g["viewer"], "concept": g["concept"]}
@@ -117,6 +120,8 @@ def _game(g):
         out["buy"] = [[int(p), t] for p, t, _ in buy]
     if rent:
         out["rent"] = [[int(p), t] for p, t, _ in rent]
+    if g["weapons"]:
+        out["weapons"] = json.loads(g["weapons"])
     return out
 
 

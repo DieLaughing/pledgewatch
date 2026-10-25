@@ -32,9 +32,10 @@ CREATE TABLE IF NOT EXISTS servers (
 );
 CREATE TABLE IF NOT EXISTS ingame (
   mid TEXT PRIMARY KEY, uuid TEXT, claim REAL, expedite REAL, expedite_cost REAL, version TEXT,
-  history TEXT NOT NULL, buy TEXT NOT NULL, rent TEXT NOT NULL, name TEXT
+  history TEXT NOT NULL, buy TEXT NOT NULL, rent TEXT NOT NULL, name TEXT, weapons TEXT
 );
 CREATE TABLE IF NOT EXISTS released (name TEXT PRIMARY KEY, patch TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS gold (name TEXT PRIMARY KEY, status TEXT NOT NULL, patch TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cargo (
   key TEXT PRIMARY KEY, name TEXT NOT NULL, names TEXT NOT NULL, scu REAL, extra REAL, boxes TEXT NOT NULL, viewer TEXT
 );
@@ -51,6 +52,8 @@ def connect(path, check_same_thread=True):
     db.executescript(SCHEMA)
     if "guild_id" not in {r["name"] for r in db.execute("PRAGMA table_info(watches)")}:
         db.execute("ALTER TABLE watches ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''")
+    if "weapons" not in {r["name"] for r in db.execute("PRAGMA table_info(ingame)")}:  # filled on the next refresh
+        db.executescript("ALTER TABLE ingame ADD COLUMN weapons TEXT; DELETE FROM state WHERE key='ingame_at';")
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
     for col, kind in (("qty", "INTEGER"), ("warbond", "INTEGER"), ("insurance", "TEXT"), ("ship_id", "TEXT"),
                       ("extras", "TEXT")):

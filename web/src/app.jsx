@@ -8,6 +8,7 @@ const FILTERS = [
   ["rentable", "Rent in game", (s) => !!s.rent],
   ["sale", "Discounted", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice)],
   ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited)],
+  ["gold", "Gold standard", (s) => s.gold?.status === "done"],
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
 ];
 const SIZES = ["Vehicle", "Snub", "Small", "Medium", "Large", "Capital"];
@@ -27,6 +28,7 @@ const SORTS = {
   size: ["Size, largest first", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
   game: ["In-game price, low to high", (a, b) => (low(a.buy) || 1e15) - (low(b.buy) || 1e15)],
   "game-desc": ["In-game price, high to low", (a, b) => (low(b.buy) || -1) - (low(a.buy) || -1)],
+  pilot: ["Pilot firepower, high to low", (a, b) => (b.weapons?.pilotDps ?? -1) - (a.weapons?.pilotDps ?? -1)],
 };
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
@@ -247,7 +249,7 @@ export function App({ data: first }) {
           minutes. Ship details from RSI's Ship Matrix and Loaner Ship Matrix. Cargo grids from{" "}
           <a href="https://sc-cargo.space" target="_blank" rel="noopener">sc-cargo.space</a> (<a href="https://github.com/sccargospace/sc-cargo.space/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>).
           In-game buy and rent prices from <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX</a>. Insurance times and
-          pledge price history from the <a href="https://starcitizen.tools" target="_blank" rel="noopener">Star Citizen Wiki</a>{" "}
+          pledge price history, weapons and gold standard ships from the <a href="https://starcitizen.tools" target="_blank" rel="noopener">Star Citizen Wiki</a>{" "}
           (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>)
           {data.gameVersion ? `, game version ${data.gameVersion}` : ""}. Your aUEC-an-hour figure stays in your browser.
         </p>
@@ -277,6 +279,12 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
           <a class="here" href={`#${anchor}`} aria-label={`Link to ${s.name}`}>#</a>
         </h2>
         <p class="specs">{specs}</p>
+        {s.weapons || s.gold ? (
+          <p class="arms">
+            {s.gold ? <span class={`tag ${s.gold.status === "done" ? "gold" : "goldwip"}`} title={goldText(s)}>{s.gold.status === "done" ? "Gold standard" : "Gold pass coming"}</span> : null}
+            {s.weapons ? <span>{armsLine(s.weapons)}</span> : null}
+          </p>
+        ) : null}
         {notFlyable ? (
           <p class="status">
             <span class="tag concept">{s.status}</span>
@@ -314,6 +322,25 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
   );
 }
 
+// "Pilot: 2× S4, 4× S3 (2 turrets) · 2 crewed turrets": what one person flying alone can shoot, then what needs crew.
+function armsLine(w) {
+  const bySize = {};
+  for (const [n, size] of w.pilot) bySize[size ?? "?"] = (bySize[size ?? "?"] || 0) + n;
+  const guns = Object.entries(bySize).sort((a, b) => b[0] - a[0]).map(([size, n]) => `${n}× S${size}`).join(", ");
+  const parts = [guns ? `Pilot: ${guns}${w.slaved ? ` (incl. ${w.slaved} turret${w.slaved === 1 ? "" : "s"})` : ""}` : "Pilot: no guns"];
+  if (w.manned) parts.push(`${w.manned} crewed turret${w.manned === 1 ? "" : "s"}`);
+  const remote = w.remote - w.slaved;
+  if (remote > 0) parts.push(`${remote} remote turret${remote === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
+function goldText(s) {
+  const g = s.gold, of = g.family ? ` (the ${g.family} family)` : "";
+  return g.status === "done"
+    ? `Gold standard pass${of}${g.patch ? ` in ${g.patch}` : ""}: reworked to every ship feature the game has so far`
+    : `Gold standard pass${of} in progress`;
+}
+
 function hours(h) {
   if (h < 1) return `${Math.max(5, Math.round(h * 60 / 5) * 5)} min`;
   return h < 10 ? `${+h.toFixed(1)} h` : `${Math.round(h)} h`;
@@ -335,10 +362,12 @@ function Details({ s, rate, version }) {
   const shownRows = all ? rows : rows.slice(0, 8);
   const month = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
   const storeIns = s.editions.filter((e) => e.inStore && e.insurance);
+  const w = s.weapons;
   return (
     <div class="details">
       <section>
         <h3>In game</h3>
+        {s.gold ? <p class={`gold-note ${s.gold.status === "done" ? "done" : ""}`}>{goldText(s)}.</p> : null}
         {buy ? (
           <dl class="facts">
             <dt>Buy</dt><dd><b>{auec(buy)}</b> at {s.buy.find((x) => x[0] === buy)[1]}</dd>
@@ -373,6 +402,26 @@ function Details({ s, rate, version }) {
         </dl>
         {version && s.insurance ? <p class="muted small">Claim times from game version {version}.</p> : null}
       </section>
+
+      {w ? (
+        <section class="wide">
+          <h3>Weapons</h3>
+          <dl class="facts">
+            <dt>Pilot</dt>
+            <dd>
+              {w.pilot.length ? (
+                <ul class="guns">
+                  {w.pilot.map(([n, size, name, turret]) => <li><b>{n}×</b> {size ? `S${size} ` : ""}{name}{turret ? <span class="muted"> in a turret the pilot can fire</span> : null}</li>)}
+                </ul>
+              ) : <span class="muted">None: every turret needs a gunner</span>}
+            </dd>
+            {w.pilotDps ? <><dt>Pilot damage</dt><dd><b>{w.pilotDps.toLocaleString("en-US")}</b> a second with the stock guns</dd></> : null}
+            {w.manned || w.remote ? <><dt>Turrets</dt><dd>{[w.manned && `${w.manned} crewed`, w.remote && `${w.remote} remote`].filter(Boolean).join(", ")}{w.slaved ? `, ${w.slaved} of them the pilot can fire` : ""}{w.turretGuns ? ` · ${w.turretGuns} guns for gunners` : ""}</dd></> : null}
+            {w.missiles ? <><dt>Missiles</dt><dd>{w.missiles}</dd></> : null}
+          </dl>
+          <p class="muted small">Stock loadout{version ? ` in game version ${version}` : ""}, from the Star Citizen Wiki.</p>
+        </section>
+      ) : null}
 
       {history.length ? (
         <section class="wide">

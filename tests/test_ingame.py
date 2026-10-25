@@ -1,4 +1,4 @@
-from pw.ingame import build_rows, history
+from pw.ingame import build_rows, history, weapons
 
 
 def test_history_keeps_standalone_store_and_upgrade_rows():
@@ -30,3 +30,14 @@ def test_rows_merge_variants_and_join_uex_by_uuid_or_name():
     assert cutlass[2:6] == (10, 3.3, 6251, "4.10.2")
     assert '"New Deal Lorville"' in cutlass[7] and '"Traveler"' in cutlass[8]
     assert '"Nowhere"' in polaris[7]  # UEX had no UUID for it, matched by name
+
+
+def test_weapons_count_pilot_guns_and_slaveable_turrets_only():
+    gun = lambda name, dps: {"name": name, "dps": dps}
+    v = {"weaponry": {"fixed_weapons": {"weapons": [gun("C-788 Cannon", 800), gun("C-788 Cannon", 800)]},
+                      "missiles": {"count": 16}},
+         "turrets": {"manned": [{"is_pilot_slaveable": False, "weapons": [gun("AD4B", 1266)] * 2}],
+                     "remote": [{"is_pilot_slaveable": True, "weapons": [gun("M5A Cannon", 680)] * 2}], "pdc": []}}
+    assert weapons(v) == {"pilot": [[2, None, "C-788 Cannon", False], [2, None, "M5A Cannon", True]], "pilotDps": 2960,
+                          "manned": 1, "remote": 1, "slaved": 1, "turretGuns": 2, "missiles": 16}
+    assert weapons({"weaponry": None}) is None

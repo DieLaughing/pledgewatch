@@ -100,6 +100,12 @@ button, input, select { font: inherit; color: inherit; }
 .status { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .tag { font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
 .tag.concept { color: var(--info); background: var(--info-bg); }
+.tag.gold { color: var(--wb); background: var(--wb-bg); }
+.tag.goldwip { color: var(--muted); background: var(--sunk); }
+.arms { margin: 4px 0 0; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.gold-note { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.gold-note.done { color: var(--wb); }
+.guns { list-style: none; margin: 0; padding: 0; }
 
 .grid-toggle { margin-top: 6px; }
 .details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }

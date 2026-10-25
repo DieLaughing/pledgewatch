@@ -31,8 +31,8 @@ SOFTWARE.
 
 ## Star Citizen Wiki API
 
-Insurance claim and expedite times, pledge price history and each ship's release patch (`addedinversion` on the
-wiki's ship pages) come from https://api.star-citizen.wiki (the Star
+Insurance claim and expedite times, pledge price history, stock weapons, each ship's release patch (`addedinversion` on the
+wiki's ship pages) and the list of gold standard ships (the wiki's Vehicle Pipeline page) come from https://api.star-citizen.wiki (the Star
 Citizen Wiki, https://starcitizen.tools). Wiki content is licensed CC BY-SA 4.0
 (https://creativecommons.org/licenses/by-sa/4.0/); Pledge Watch credits it on the site and passes those figures on
 under the same terms in `/ships.json`.

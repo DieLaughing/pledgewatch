@@ -186,6 +186,11 @@ class Site:
             os.replace(tmp, path)
         return web.FileResponse(path, headers={"Cache-Control": "public, max-age=604800, immutable"})
 
+    def _file(self, name):
+        async def handler(request):
+            return web.FileResponse(os.path.join(self.dist, name), headers={"Cache-Control": "public, max-age=604800"})
+        return handler
+
     async def health(self, request):
         return web.Response(text="ok")
 
@@ -195,6 +200,8 @@ class Site:
         app.router.add_get("/ships.json", self.ships_json)
         app.router.add_get("/img/{id:[0-9a-f]{16}}.jpg", self.image)
         app.router.add_get("/healthz", self.health)
+        for name in ("favicon.svg", "favicon.ico", "apple-touch-icon.png"):
+            app.router.add_get(f"/{name}", self._file(name))
         app.router.add_static("/assets", os.path.join(self.dist, "assets"), append_version=False)
         app.on_response_prepare.append(_security_headers)
         return app

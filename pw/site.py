@@ -211,6 +211,7 @@ def _download(url):
 async def _security_headers(request, response):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Strict-Transport-Security", "max-age=15552000")  # 180 days, this host only
     response.headers.setdefault("Content-Security-Policy",
                                 "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; "
                                 "script-src 'self'; frame-ancestors 'none'; base-uri 'none'")

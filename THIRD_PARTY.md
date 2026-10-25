@@ -29,6 +29,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Star Citizen Wiki API
+
+Insurance claim and expedite times, and pledge price history, come from https://api.star-citizen.wiki (the Star
+Citizen Wiki, https://starcitizen.tools). Wiki content is licensed CC BY-SA 4.0
+(https://creativecommons.org/licenses/by-sa/4.0/); Pledge Watch credits it on the site and passes those figures on
+under the same terms in `/ships.json`.
+
+## UEX
+
+In-game buy and rent prices come from the public UEX API (https://uexcorp.space), credited on the site.
+
 ## RSI
 
 Ship, store and loaner data come from Roberts Space Industries' public website. Pledge Watch is a fan project and is

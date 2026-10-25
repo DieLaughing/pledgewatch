@@ -65,6 +65,8 @@ button, input, select { font: inherit; color: inherit; }
 .chip .n { font: 12px var(--mono); opacity: .8; }
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .selects { display: flex; flex-wrap: wrap; gap: 8px; }
+.rate { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.rate input { width: 12ch; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: 13px var(--mono); text-align: right; }
 .selects select { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 13px; max-width: 100%; }
 .count { margin: -6px 0 0; color: var(--muted); font-size: 13px; display: flex; gap: 12px; align-items: baseline; }
 .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: 13px; }
@@ -85,13 +87,28 @@ button, input, select { font: inherit; color: inherit; }
 .ship > img, .ship > .noimg { grid-column: 1; grid-row: 1; }
 .ship > .info { grid-column: 2; grid-row: 1; }
 .ship > .buy { grid-column: 3; grid-row: 1; }
-.ship > .grid { grid-row: 2; }
+.ship > .details { grid-row: 2; }
 .specs { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .status { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .tag { font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
 .tag.concept { color: var(--info); background: var(--info-bg); }
 
 .grid-toggle { margin-top: 6px; }
+.details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 4px; }
+.details section { background: var(--sunk); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.details h3 { margin: 0 0 6px; font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.details p { margin: 0 0 6px; font-size: 14px; }
+.details .muted, .muted { color: var(--muted); }
+.where, .hist { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; display: grid; gap: 2px; }
+.where li, .hist li { display: flex; justify-content: space-between; gap: 10px; }
+.where span:last-child, .hist span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hist li { display: grid; grid-template-columns: 1fr auto 6ch; }
+.hist .wb { color: var(--wb); }
+.hist i { font-style: normal; color: var(--muted); font-size: 12px; }
+.details .small { font-size: 12px; margin-top: 6px; }
+.details .grid { grid-column: 1 / -1; margin: 0; }
+.details .links { grid-column: 1 / -1; display: flex; gap: 16px; font-size: 13px; }
+.details .links a { color: var(--accent); }
 .grid { grid-column: 1 / -1; margin: 4px 0 2px; padding: 12px; background: var(--sunk); border-radius: 8px; }
 .grid svg { display: block; width: 100%; max-height: 260px; }
 .grid rect { fill: var(--accent); stroke: var(--surface); stroke-width: .08; }
@@ -116,6 +133,9 @@ button, input, select { font: inherit; color: inherit; }
 .ed-warbond { background: var(--wb-bg); border-color: transparent; }
 .ed-warbond .label, .ed-warbond .save { color: var(--wb); }
 .ed-10year { background: var(--ten-bg); border-color: transparent; }
+.ed-game { background: var(--good-bg); border-color: transparent; cursor: default; }
+.ed-game .label { color: var(--good); }
+.ed .up { font-size: 12px; color: var(--info); font-weight: 600; }
 .ed-10year .label { color: var(--ten); }
 .ed .state { color: var(--warn); }
 .ed.soldout { opacity: .6; }
@@ -126,7 +146,7 @@ button, input, select { font: inherit; color: inherit; }
   .ship { grid-template-columns: 112px minmax(0, 1fr); align-items: start; }
   .ship img, .noimg { width: 112px; height: 63px; }
   .ship > .buy { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
-  .ship > .grid { grid-row: 3; }
+  .ship > .details { grid-row: 3; }
   .notin { text-align: left; }
 }
 

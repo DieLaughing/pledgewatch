@@ -4,6 +4,8 @@ const FILTERS = [
   ["warbond", "Warbond", (s) => s.editions.some((e) => e.inStore && e.label === "Warbond")],
   ["anniversary", "10 Year", (s) => s.editions.some((e) => e.inStore && e.label === "10 Year")],
   ["lti", "Lifetime insurance", (s) => s.editions.some((e) => e.inStore && e.insurance === "Lifetime")],
+  ["buyable", "Buy in game", (s) => !!s.buy],
+  ["rentable", "Rent in game", (s) => !!s.rent],
   ["sale", "On sale", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice)],
   ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited)],
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
@@ -14,7 +16,14 @@ const SORTS = {
   "price-asc": ["Price, low to high", (a, b) => (price(a) || 1e12) - (price(b) || 1e12)],
   name: ["Name", () => 0],
   size: ["Size", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
+  game: ["In-game price, low to high", (a, b) => (low(a.buy) || 1e15) - (low(b.buy) || 1e15)],
 };
+const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
+const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
+const RATE_KEY = "pw-rate";
+function savedRate() {
+  try { return Number(localStorage.getItem(RATE_KEY)) || 500000; } catch { return 500000; }
+}
 const KIND = {
   new: ["Came in", "good"], back: ["Back", "good"], restock: ["Restocked", "good"], low: ["Low stock", "warn"],
   sold_out: ["Sold out", "bad"], gone: ["Left the store", "bad"], price: ["Price", "info"],
@@ -46,6 +55,7 @@ function readUrl() {
     maker: p.get("maker") || "",
     size: p.get("size") || "",
     sort: SORTS[p.get("sort")] ? p.get("sort") : "price-desc",
+    from: (p.get("from") || "").replace(/-/g, " "),
   };
 }
 
@@ -57,6 +67,7 @@ function writeUrl(s) {
   if (s.maker) p.set("maker", s.maker);
   if (s.size) p.set("size", s.size);
   if (s.sort !== "price-desc") p.set("sort", s.sort);
+  if (s.from) p.set("from", s.from.replace(/ /g, "-"));
   const qs = p.toString();
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
@@ -83,6 +94,17 @@ export function App({ data }) {
       .filter((s) => !st.size || s.size === st.size)
       .sort((a, b) => SORTS[st.sort][1](a, b) || a.name.localeCompare(b.name));
   }, [ships, inStore, st]);
+
+  const [rate, setRate] = useState(savedRate);
+  const changeRate = (v) => {
+    const n = Math.max(1000, Number(String(v).replace(/[^0-9]/g, "")) || 0);
+    setRate(n);
+    try { localStorage.setItem(RATE_KEY, String(n)); } catch {}
+  };
+  const upgradable = useMemo(() => inStore.filter((s) => s.editions.some((e) => e.inStore && e.label === "Standard"))
+    .map((s) => [s.key, s.name, s.editions.find((e) => e.inStore && e.label === "Standard").price])
+    .sort((a, b) => a[2] - b[2]), [inStore]);
+  const fromPrice = (upgradable.find(([k]) => k === st.from) || [])[2] || 0;
 
   const toggle = (k) => set({ f: st.f.includes(k) ? st.f.filter((x) => x !== k) : [...st.f, k] });
   const clear = () => set({ q: "", f: [], maker: "", size: "" });
@@ -143,6 +165,15 @@ export function App({ data }) {
               <select id="sort" aria-label="Sort" value={st.sort} onChange={(e) => set({ sort: e.currentTarget.value })}>
                 {Object.entries(SORTS).map(([k, [label]]) => <option value={k}>{label}</option>)}
               </select>
+              <select id="from" aria-label="Upgrade from a ship you own" value={st.from} onChange={(e) => set({ from: e.currentTarget.value })}>
+                <option value="">Upgrade from…</option>
+                {upgradable.map(([k, name, p]) => <option value={k}>{`${name} (${money(p)})`}</option>)}
+              </select>
+              <label class="rate" for="rate">
+                I earn
+                <input id="rate" inputMode="numeric" value={rate.toLocaleString("en-US")} onChange={(e) => changeRate(e.currentTarget.value)} />
+                aUEC an hour
+              </label>
             </div>
           </div>
 
@@ -152,7 +183,7 @@ export function App({ data }) {
           </p>
 
           {shown.length ? (
-            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} />)}</ul>
+            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromPrice={fromPrice} version={data.gameVersion} />)}</ul>
           ) : (
             <p class="empty">
               {st.f.includes("sale") || st.f.includes("limited")
@@ -169,6 +200,10 @@ export function App({ data }) {
           dollars before tax, as seen logged out, so Concierge and subscriber early access isn't included. Checked every 5
           minutes. Ship details from RSI's Ship Matrix and Loaner Ship Matrix. Cargo grids from{" "}
           <a href="https://sc-cargo.space" target="_blank" rel="noopener">sc-cargo.space</a> (<a href="https://github.com/sccargospace/sc-cargo.space/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>).
+          In-game buy and rent prices from <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX</a>. Insurance times and
+          pledge price history from the <a href="https://starcitizen.tools" target="_blank" rel="noopener">Star Citizen Wiki</a>{" "}
+          (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>)
+          {data.gameVersion ? `, game version ${data.gameVersion}` : ""}. Your aUEC-an-hour figure stays in your browser.
         </p>
         <p>No accounts, no cookies, no tracking. <a href="/ships.json">The data as JSON</a>.</p>
       </footer>
@@ -176,7 +211,7 @@ export function App({ data }) {
   );
 }
 
-function Ship({ ship: s, now }) {
+function Ship({ ship: s, now, rate, from, fromPrice, version }) {
   const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
@@ -184,6 +219,8 @@ function Ship({ ship: s, now }) {
   const specs = [s.maker, s.role, s.size, s.crew && `crew ${s.crew}`, s.cargo ? `${s.cargo.toLocaleString("en-US")} SCU` : ""]
     .filter(Boolean).join(" · ");
   const notFlyable = s.status && s.status !== "Flight ready";
+  const upgrade = from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
+  const buy = low(s.buy), rent = low(s.rent);
   return (
     <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
       {s.img ? <img src={s.img} alt="" width="160" height="90" loading="lazy" decoding="async" /> : <div class="noimg" />}
@@ -199,15 +236,25 @@ function Ship({ ship: s, now }) {
             {s.loaners ? ` Loaners: ${s.loaners}` : ""}
           </p>
         ) : null}
-        {s.grid ? (
-          <button type="button" class="link grid-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? "Hide cargo grid" : "Cargo grid"}
-          </button>
-        ) : null}
+        <button type="button" class="link grid-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Hide details" : "Details"}
+        </button>
       </div>
-      {open && s.grid ? <Grid grid={s.grid} /> : null}
       <div class="buy">
-        {s.editions.filter((e) => e.inStore).map((e) => <Edition e={e} standard={standard} />)}
+        {s.editions.filter((e) => e.inStore).map((e) => <Edition e={e} standard={standard} upgrade={e === standard ? upgrade : 0} />)}
+        {buy ? (
+          <div class="ed ed-game" title="Lowest in-game buy price">
+            <span class="label">In game</span>
+            <span class="price">{auec(buy)}</span>
+            <span class="ins">≈ {hours(buy / rate)} of play</span>
+          </div>
+        ) : rent ? (
+          <div class="ed ed-game" title="Lowest in-game rental">
+            <span class="label">Rent in game</span>
+            <span class="price">{auec(rent)}</span>
+            <span class="ins">per day</span>
+          </div>
+        ) : null}
         {!s.inStore ? (
           <p class="notin">
             Not in the store
@@ -215,7 +262,83 @@ function Ship({ ship: s, now }) {
           </p>
         ) : null}
       </div>
+      {open ? <Details s={s} rate={rate} version={version} /> : null}
     </li>
+  );
+}
+
+function hours(h) {
+  if (h < 1) return `${Math.max(5, Math.round(h * 60 / 5) * 5)} min`;
+  return h < 10 ? `${+h.toFixed(1)} h` : `${Math.round(h)} h`;
+}
+
+function Details({ s, rate, version }) {
+  const pledge = Math.min(...s.editions.filter((e) => e.inStore).map((e) => e.price), Infinity);
+  const lastPrice = s.history?.length ? s.history[s.history.length - 1][1] * 100 : 0;
+  const dollars = (Number.isFinite(pledge) ? pledge : lastPrice) / 100;
+  const buy = low(s.buy);
+  const wb = (s.history || []).filter((h) => h[2]);
+  const lowestWb = wb.length ? wb.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
+  const lastWb = wb.length ? wb[wb.length - 1] : null;
+  const month = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+  return (
+    <div class="details">
+      <section>
+        <h3>In game</h3>
+        {buy ? (
+          <>
+            <p><b>Buy for {auec(buy)}</b> at {s.buy.find((x) => x[0] === buy)[1]}{s.buy.length > 1 ? `, or ${s.buy.length - 1} other place${s.buy.length > 2 ? "s" : ""}` : ""}.</p>
+            <p>At {auec(rate)} an hour that's <b>about {hours(buy / rate)}</b> of play
+              {dollars ? `, or roughly ${Math.round(buy / dollars).toLocaleString("en-US")} aUEC for each dollar of its $${dollars.toLocaleString("en-US")} pledge price` : ""}.</p>
+          </>
+        ) : (
+          <p>Not sold in game right now. New ships usually reach the pledge store long before they're sold in game.</p>
+        )}
+        {s.rent ? <p>Rent from <b>{auec(low(s.rent))}</b> a day at {s.rent.find((x) => x[0] === low(s.rent))[1]}{s.rent.length > 1 ? ` (${s.rent.length} places)` : ""}.</p> : null}
+        {s.buy && s.buy.length > 1 ? (
+          <ul class="where">{s.buy.map(([p, t]) => <li><span>{t}</span><span>{auec(p)}</span></li>)}</ul>
+        ) : null}
+      </section>
+
+      <section>
+        <h3>Insurance</h3>
+        {s.insurance ? (
+          <p>Claim takes <b>{s.insurance.claim} min</b>. Expedite: {s.insurance.expedite} min for <b>{s.insurance.expediteCost.toLocaleString("en-US")} aUEC</b>.
+            {version ? <span class="muted"> Game {version}.</span> : null}</p>
+        ) : <p class="muted">No claim times known for this ship yet.</p>}
+        {s.editions.some((e) => e.inStore && e.insurance) ? (
+          <p>In the store: {s.editions.filter((e) => e.inStore && e.insurance).map((e) => `${e.label} ${e.insurance === "Lifetime" ? "lifetime" : e.insurance}`).join(", ")}.</p>
+        ) : null}
+        {s.loaners ? <p>Loaners until it flies: {s.loaners}.</p> : null}
+      </section>
+
+      {s.history && s.history.length ? (
+        <section>
+          <h3>Price history</h3>
+          <p>
+            {lowestWb ? <>Lowest warbond <b>${lowestWb[1]}</b> ({month(lowestWb[0])}), last warbond <b>${lastWb[1]}</b> ({month(lastWb[0])}).</> : "No warbond seen for this ship."}
+          </p>
+          <ul class="hist">
+            {[...s.history].reverse().slice(0, 12).map(([d, p, w, src]) => (
+              <li>
+                <span>{month(d)}</span>
+                <span class={w ? "wb" : ""}>{w ? "Warbond" : "Standard"}{src === "upgrade" ? <i> upgrade</i> : null}</span>
+                <span>${p.toLocaleString("en-US")}</span>
+              </li>
+            ))}
+          </ul>
+          <p class="muted small">"Upgrade" rows are the ship's value in RSI's upgrade (CCU) store, which can differ from the store price.</p>
+        </section>
+      ) : null}
+
+      {s.grid ? <Grid grid={s.grid} /> : null}
+
+      <p class="links">
+        {s.rsi ? <a href={s.rsi} target="_blank" rel="noopener">RSI page</a> : null}
+        <a href={`https://starcitizen.tools/index.php?search=${encodeURIComponent(s.name)}`} target="_blank" rel="noopener">Star Citizen Wiki</a>
+        {s.grid ? <a href={s.grid.viewer} target="_blank" rel="noopener">3D cargo</a> : null}
+      </p>
+    </div>
   );
 }
 
@@ -284,7 +407,7 @@ function Grid({ grid }) {
 
 const scu = (dims) => dims.split(" × ").reduce((a, n) => a * Number(n), 1);
 
-function Edition({ e, standard }) {
+function Edition({ e, standard, upgrade }) {
   const saving = e.label !== "Standard" && standard && e.price < standard.price ? standard.price - e.price : 0;
   const onSale = e.listPrice && e.price < e.listPrice;
   const state = !e.available ? "Sold out" : e.limited ? `Limited${e.level ? `, ${e.level}` : ""}` : "";
@@ -298,6 +421,7 @@ function Edition({ e, standard }) {
       {e.insurance ? <span class={`ins${e.insurance === "Lifetime" ? " lti" : ""}`}>{e.insurance === "Lifetime" ? "Lifetime insurance" : `${e.insurance} insurance`}</span> : null}
       {e.paints ? <span class="extra" title={e.includes.join(", ")}>+ {e.paints} paint{e.paints === 1 ? "" : "s"}</span> : null}
       {saving ? <span class="save">save {money(saving)}</span> : null}
+      {upgrade ? <span class="up">upgrade +{money(upgrade)}</span> : null}
       {state ? <span class="state">{state}</span> : null}
     </a>
   );

@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS catalog (
   size TEXT, min_crew INTEGER, max_crew INTEGER, cargo REAL, length REAL, image TEXT, url TEXT, mid TEXT
 );
 CREATE TABLE IF NOT EXISTS loaners (ship TEXT PRIMARY KEY, keys TEXT NOT NULL, loaners TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS ingame (
+  mid TEXT PRIMARY KEY, uuid TEXT, claim REAL, expedite REAL, expedite_cost REAL, version TEXT,
+  history TEXT NOT NULL, buy TEXT NOT NULL, rent TEXT NOT NULL, name TEXT
+);
 CREATE TABLE IF NOT EXISTS cargo (
   key TEXT PRIMARY KEY, name TEXT NOT NULL, names TEXT NOT NULL, scu REAL, extra REAL, boxes TEXT NOT NULL, viewer TEXT
 );

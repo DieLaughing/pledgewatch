@@ -41,6 +41,8 @@ def build(db, now=None):
     now = int(now or time.time())
     ships = {}
     by_id = {}
+    game = {r["mid"]: r for r in db.execute("SELECT * FROM ingame")}
+    version = ""
     for c in db.execute("SELECT * FROM catalog"):
         if c["mid"]:
             by_id[c["mid"]] = c["key"]
@@ -50,6 +52,10 @@ def build(db, now=None):
             "crew": _crew(c["min_crew"], c["max_crew"]), "cargo": c["cargo"], "length": c["length"],
             "status": STATUS.get(c["status"], c["status"] or ""), "img": c["image"], "rsi": c["url"], "editions": [],
         }
+        g = game.get(c["mid"])
+        if g:
+            ships[c["key"]].update(_game(g))
+            version = max(version, g["version"] or "")
     matrix = set(ships)
     for s in db.execute("SELECT * FROM ships ORDER BY price"):
         key = (s["ship_id"] and by_id.get(s["ship_id"])) or match_key(matrix, s["name"])
@@ -92,8 +98,22 @@ def build(db, now=None):
                         "was": d.get("was"), "now": d.get("now"), "limited": d.get("limited"), "url": d.get("url")})
     first = db.execute("SELECT MIN(first_seen) FROM ships").fetchone()[0]
     last_ok = db.execute("SELECT value FROM state WHERE key='last_ok'").fetchone()
-    return {"ships": out, "changes": changes, "trackingSince": first, "checkedAt": json.loads(last_ok[0]) if last_ok
+    return {"ships": out, "changes": changes, "gameVersion": version, "trackingSince": first, "checkedAt": json.loads(last_ok[0]) if last_ok
             else None, "builtAt": now}
+
+
+def _game(g):
+    """In-game prices, insurance and store history for one ship, trimmed for the page."""
+    buy, rent = json.loads(g["buy"]), json.loads(g["rent"])
+    out = {"history": [h[:4] for h in json.loads(g["history"])]}
+    if g["claim"]:
+        out["insurance"] = {"claim": round(g["claim"], 1), "expedite": round(g["expedite"] or 0, 1),
+                            "expediteCost": int(g["expedite_cost"] or 0)}
+    if buy:
+        out["buy"] = [[int(p), t] for p, t, _ in buy]
+    if rent:
+        out["rent"] = [[int(p), t] for p, t, _ in rent]
+    return out
 
 
 def _crew(lo, hi):

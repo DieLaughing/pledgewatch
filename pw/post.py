@@ -68,8 +68,9 @@ def ago(ts, now):
     return "earlier today"
 
 
-def message(e, ts, role=None, users=()):
-    """Build the message for one event. `users` are people watching this ship, pinged by name."""
+def message(e, ts, role=None, users=(), info=None):
+    """Build the message for one event. `users` are people watching this ship, pinged by name. `info` is the
+    ship's status and loaners from the catalog, shown when it isn't flight ready."""
     label, colour, ping = KINDS[e["kind"]]
     if e["kind"] in ("store_down", "store_ok"):
         text = (f"The RSI store has failed {e.get('fails', 3)} checks in a row. Alerts are paused until it answers "
@@ -92,6 +93,12 @@ def message(e, ts, role=None, users=()):
     if e["kind"] == "back" and e.get("last_seen"):
         fields.append({"name": "Last seen", "value": ago(e["last_seen"], ts), "inline": True})
 
+    info = info or {}
+    if info.get("status") and info["status"] != "Flight ready":
+        fields.append({"name": "Status", "value": info["status"], "inline": True})
+    if info.get("loaners") and info.get("status") != "Flight ready":
+        fields.append({"name": "Loaners until it flies", "value": info["loaners"], "inline": False})
+
     embed = {"author": {"name": label}, "title": e["name"], "url": e["url"], "color": colour, "fields": fields,
              "footer": {"text": "Public store: what anyone can buy, logged out · USD before tax"}, "timestamp": _iso(ts)}
     if e.get("image"):
@@ -110,6 +117,7 @@ def _iso(ts):
 
 def flush(db, apps, now=None):
     """Post every event that hasn't reached every app yet. Safe to call after each check."""
+    from .catalog import info
     from .commands import watchers
     now = int(now or time.time())
     rows = db.execute("SELECT id, ts, data, posted FROM events WHERE ts >= ? ORDER BY id", (now - MAX_AGE,)).fetchall()
@@ -120,7 +128,8 @@ def flush(db, apps, now=None):
             if app.name in posted:
                 continue
             try:
-                posted[app.name] = app.send(message(e, row["ts"], app.role, watchers(db, app.name, e))).get("id", True)
+                msg = message(e, row["ts"], app.role, watchers(db, app.name, e), info(db, e.get("name", "")))
+                posted[app.name] = app.send(msg).get("id", True)
             except (urllib.error.URLError, TimeoutError, ValueError) as err:
                 detail = err.read().decode(errors="replace")[:200] if isinstance(err, urllib.error.HTTPError) else ""
                 log.warning("couldn't post %s to %s: %s %s", e["kind"], app.name, err, detail)

@@ -35,7 +35,7 @@ def watch(db, platform, user, query, now=None):
                    (platform, user, q, int(now or time.time())))
     reply = (f"Watching **{q}**. I'll ping you when a ship matching it comes into the public store, restocks, "
              f"runs low or changes price.\n" + _now_line(db, q))
-    if not _ships(db, q):
+    if not _ships(db, q) and not _catalog(db, q):
         reply += ("\nI haven't seen a ship with that name yet, so check the spelling. I match any ship whose name "
                   "contains it.")
     return reply
@@ -71,10 +71,11 @@ def store(db, query=None, now=None):
         return f"{rows[0]} ships are in the public store right now, {rows[1] or 0} of them limited.\n{ACCESS_NOTE}"
     q = norm(query)
     ships = _ships(db, q)
-    if not ships:
-        since = db.execute("SELECT MIN(first_seen) FROM ships").fetchone()[0] or now
-        return (f"Nothing matching **{q}** is in the public store, and I haven't seen it since I started watching "
-                f"{ago(since, now)}.\n{ACCESS_NOTE}")
+    since = db.execute("SELECT MIN(first_seen) FROM ships").fetchone()[0] or now
+    known = {norm(s["name"]) for s in ships}
+    others = [c for c in _catalog(db, q) if c["key"] not in known]
+    if not ships and not others:
+        return (f"I don't know a ship called **{q}**. Check the spelling, or try part of the name.\n{ACCESS_NOTE}")
     lines = []
     for s in ships[:8]:
         if s["listed"]:
@@ -82,16 +83,27 @@ def store(db, query=None, now=None):
             lines.append(f"- **{s['name']}**: {money(s['price'])}, {state}")
         else:
             lines.append(f"- **{s['name']}**: not in the store, last seen {ago(s['last_seen'], now)}")
-    if len(ships) > 8:
-        lines.append(f"- and {len(ships) - 8} more. Try a longer name.")
+    for c in others[:max(0, 8 - len(lines))]:
+        status = {"in-concept": ", in concept"}.get(c["status"], "")
+        lines.append(f"- **{c['name']}**: not in the store, not seen since I started watching {ago(since, now)}{status}")
+    if len(ships) + len(others) > 8:
+        lines.append(f"- and {len(ships) + len(others) - 8} more. Try a longer name.")
     return "\n".join(lines) + "\n" + ACCESS_NOTE
 
 
 def names(db, current, limit=25):
-    """Ship names for autocomplete, in-store ships first."""
+    """Ship names for autocomplete: in the store now first, then every other ship that exists."""
     q = norm(current)
-    rows = db.execute("SELECT name FROM ships ORDER BY listed DESC, name").fetchall()
-    return [r[0] for r in rows if q in norm(r[0])][:limit]
+    rows = db.execute("SELECT name FROM ships WHERE listed=1 ORDER BY name").fetchall()
+    rows += db.execute("SELECT name FROM catalog ORDER BY name").fetchall()
+    rows += db.execute("SELECT name FROM ships WHERE listed=0 ORDER BY name").fetchall()
+    out, seen = [], set()
+    for (n,) in rows:
+        k = norm(n)
+        if q in k and k not in seen:
+            seen.add(k)
+            out.append(n)
+    return out[:limit]
 
 
 def watchers(db, platform, event):
@@ -118,6 +130,10 @@ def _mine(db, platform, user):
 def _ships(db, q):
     rows = db.execute("SELECT * FROM ships ORDER BY listed DESC, price DESC").fetchall()
     return [r for r in rows if q in norm(r["name"])]
+
+
+def _catalog(db, q):
+    return [r for r in db.execute("SELECT * FROM catalog ORDER BY name").fetchall() if q in r["key"]]
 
 
 def _now_line(db, q, short=False):

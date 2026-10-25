@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS watches (
   platform TEXT NOT NULL, user_id TEXT NOT NULL, query TEXT NOT NULL, created INTEGER NOT NULL,
   PRIMARY KEY (platform, user_id, query)
 );
+CREATE TABLE IF NOT EXISTS catalog (
+  name TEXT PRIMARY KEY, key TEXT NOT NULL, maker TEXT, status TEXT, focus TEXT, size TEXT, url TEXT
+);
+CREATE TABLE IF NOT EXISTS loaners (ship TEXT PRIMARY KEY, keys TEXT NOT NULL, loaners TEXT NOT NULL);
 """
 
 

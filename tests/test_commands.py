@@ -44,7 +44,7 @@ def test_store_answers(tmp_path):
     assert cmd.store(db).startswith("3 ships are in the public store right now, 2 of them limited")
     r = cmd.store(db, "idris")
     assert "Idris-P**: $1,500, limited, high" in r and "Idris-M" in r and "public store" in r
-    assert "Nothing matching **polaris**" in cmd.store(db, "Polaris", now=DAY * 3)
+    assert "don't know a ship called **polaris**" in cmd.store(db, "Polaris", now=DAY * 3)
 
 
 def test_watchers_pinged_on_matching_events_only(tmp_path):

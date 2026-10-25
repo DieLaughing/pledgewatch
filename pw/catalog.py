@@ -15,6 +15,8 @@ log = logging.getLogger("pledgewatch")
 SHIP_MATRIX = "https://robertsspaceindustries.com/ship-matrix/index"
 LOANERS = "https://support.robertsspaceindustries.com/api/v2/help_center/en-us/articles/360003093114.json"
 REFRESH = 86400
+# More changes than this in one day means RSI reworked a page, not news: log them for the site but don't post.
+MAX_POSTED_CHANGES = 12
 
 STATUS = {"flight-ready": "Flight ready", "in-concept": "In concept", "in-production": "In production"}
 
@@ -30,13 +32,41 @@ def refresh(db, now=None, force=False):
     now = int(now or time.time())
     last = db.execute("SELECT value FROM state WHERE key='catalog_at'").fetchone()
     if not force and last and now - json.loads(last[0]) < REFRESH:
-        return
+        return []
     try:
         ships = [_ship(s) for s in _get(SHIP_MATRIX)["data"]]
         loaners = parse_loaners(_get(LOANERS)["article"]["body"])
     except Exception as e:
         log.warning("couldn't refresh the ship list: %s", e)
-        return
+        return []
+    events = apply(db, ships, loaners, now)
+    log.info("ship list: %d ships, %d with loaners, %d change(s)", len(ships), len(loaners), len(events))
+    return events
+
+
+def apply(db, ships, loaners, now):
+    """Replace both lists and log what changed since last time: a ship's flight status (In concept -> Flight
+    ready) and the loaners RSI lists for it. The first load is a quiet baseline."""
+    old_status = {r[0]: r[1] for r in db.execute("SELECT name, status FROM catalog")}
+    old_loaners = {r[0]: r[1] for r in db.execute("SELECT ship, loaners FROM loaners")}
+    events = []
+    if old_status:
+        for row in ships:
+            name, status, url = row[0], row[4], row[13]
+            was = old_status.get(name)
+            if name not in old_status:
+                events.append({"kind": "status", "name": name, "url": url, "was": "", "now": STATUS.get(status, status)})
+            elif was != status:
+                events.append({"kind": "status", "name": name, "url": url, "was": STATUS.get(was, was),
+                               "now": STATUS.get(status, status)})
+    if old_loaners:
+        for ship, _, loan in loaners:
+            if old_loaners.get(ship) != loan:
+                events.append({"kind": "loaners", "name": ship, "url": "", "was": old_loaners.get(ship, ""),
+                               "now": loan})
+        for ship, loan in old_loaners.items():
+            if ship not in {l[0] for l in loaners}:
+                events.append({"kind": "loaners", "name": ship, "url": "", "was": loan, "now": ""})
     with db:
         db.execute("DELETE FROM catalog")
         db.executemany("INSERT OR REPLACE INTO catalog VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ships)
@@ -45,7 +75,13 @@ def refresh(db, now=None, force=False):
                        [(ship, json.dumps(keys), loan) for ship, keys, loan in loaners])
         db.execute("INSERT INTO state (key, value) VALUES ('catalog_at', ?) "
                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(now),))
-    log.info("ship list: %d ships, %d with loaners", len(ships), len(loaners))
+        quiet = json.dumps({"discord": "skipped", "fluxer": "skipped"}) if len(events) > MAX_POSTED_CHANGES else "{}"
+        for e in events:
+            db.execute("INSERT INTO events (ts, kind, ship_id, data, posted) VALUES (?,?,?,?,?)",
+                       (now, e["kind"], None, json.dumps(e), quiet))
+    if len(events) > MAX_POSTED_CHANGES:
+        log.warning("%d ship list changes at once; logged on the site, not posted", len(events))
+    return events
 
 
 def _ship(s):

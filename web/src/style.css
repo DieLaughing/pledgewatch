@@ -57,7 +57,8 @@ button, input, select { font: inherit; color: inherit; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; color: var(--muted); cursor: pointer; white-space: nowrap; font-size: 14px; }
 .tabs button[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
 
-.controls { display: grid; gap: 10px; position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 10px 0; }
+.controls { display: grid; gap: 10px; background: var(--bg); padding: 10px 0; }
+@media (min-width: 721px) { .controls { position: sticky; top: 0; z-index: 2; } }
 #q { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 15px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 13px; color: var(--muted); cursor: pointer; }
@@ -77,11 +78,27 @@ button, input, select { font: inherit; color: inherit; }
 .info h2 { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.25; }
 .info h2 a { text-decoration: none; }
 .info h2 a:hover { text-decoration: underline; }
+.info h2 .here { margin-left: 6px; color: var(--muted); font-weight: 400; opacity: 0; }
+.ship:hover .here, .here:focus-visible { opacity: 1; }
+.ship { scroll-margin-top: 16px; }
+@media (min-width: 721px) { .ship { scroll-margin-top: 170px; } }
+.ship > img, .ship > .noimg { grid-column: 1; grid-row: 1; }
+.ship > .info { grid-column: 2; grid-row: 1; }
+.ship > .buy { grid-column: 3; grid-row: 1; }
+.ship > .grid { grid-row: 2; }
 .specs { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .status { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .tag { font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
 .tag.concept { color: var(--info); background: var(--info-bg); }
 
+.grid-toggle { margin-top: 6px; }
+.grid { grid-column: 1 / -1; margin: 4px 0 2px; padding: 12px; background: var(--sunk); border-radius: 8px; }
+.grid svg { display: block; width: 100%; max-height: 260px; }
+.grid rect { fill: var(--accent); stroke: var(--surface); stroke-width: .08; }
+.grid figcaption { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.grid figcaption a { color: var(--accent); }
+.changes .nm { font-weight: 550; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.changes .amt.txt { font: 13px var(--sans); color: var(--muted); text-align: right; }
 .buy { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .ed { display: grid; grid-template-columns: auto; min-width: 104px; padding: 6px 10px; border-radius: 8px; text-decoration: none; border: 1px solid var(--line); background: var(--surface); }
 .ed:hover { border-color: currentColor; }
@@ -101,7 +118,8 @@ button, input, select { font: inherit; color: inherit; }
 @media (max-width: 720px) {
   .ship { grid-template-columns: 112px minmax(0, 1fr); align-items: start; }
   .ship img, .noimg { width: 112px; height: 63px; }
-  .buy { grid-column: 1 / -1; justify-content: flex-start; }
+  .ship > .buy { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
+  .ship > .grid { grid-row: 3; }
   .notin { text-align: left; }
 }
 

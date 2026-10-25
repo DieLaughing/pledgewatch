@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from . import catalog
+from . import cargo, catalog
 from . import db as store_db
 from .diff import diff
 from .post import flush
@@ -54,8 +54,8 @@ def _failed(db, reason, now):
 
 
 def tick(db, apps):
-    catalog.refresh(db)
-    for e in check(db):
+    cargo.refresh(db)
+    for e in catalog.refresh(db) + check(db):
         log.info("%s: %s", e["kind"], e.get("name", e.get("reason", "")))
     flush(db, apps)
 

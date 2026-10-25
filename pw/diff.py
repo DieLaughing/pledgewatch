@@ -5,7 +5,7 @@
 MISSES_BEFORE_GONE = 2
 
 # Stock levels RSI reports, most to least.
-LEVELS = ["high", "medium", "low"]
+LEVELS = ["high", "low", "none"]  # the store's TyStockLevel values
 
 
 def diff(known, seen):

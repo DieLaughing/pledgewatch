@@ -16,6 +16,7 @@ import urllib.request
 
 from aiohttp import web
 
+from . import cargo as cargo_grids
 from .catalog import STATUS, info, match_key
 from .commands import norm
 from .store import USER_AGENT
@@ -62,8 +63,13 @@ def build(db, now=None):
         })
         if not ship["img"]:
             ship["img"] = s["image"]
+    grids = cargo_grids.lookup(db)
     out = []
     for ship in ships.values():
+        g = cargo_grids.find(grids, ship["name"])
+        if g:
+            ship["grid"] = {"scu": g["scu"], "boxes": g["boxes"], "viewer": g["viewer"], "concept": g["concept"]}
+            ship["cargo"] = g["scu"]
         ship["editions"].sort(key=lambda e: (not e["inStore"], EDITION_ORDER.get(e["label"], 9), e["price"] or 0))
         ship["inStore"] = any(e["inStore"] for e in ship["editions"])
         if ship["status"] and ship["status"] != "Flight ready":
@@ -74,10 +80,10 @@ def build(db, now=None):
 
     changes = []
     for e in db.execute("SELECT ts, kind, data FROM events WHERE kind NOT IN ('store_down', 'store_ok') "
-                        "ORDER BY id DESC LIMIT 100"):
+                        "ORDER BY id DESC LIMIT 150"):
         d = json.loads(e["data"])
         changes.append({"ts": e["ts"], "kind": e["kind"], "name": d.get("name"), "price": d.get("price"),
-                        "was": d.get("was"), "limited": d.get("limited"), "url": d.get("url")})
+                        "was": d.get("was"), "now": d.get("now"), "limited": d.get("limited"), "url": d.get("url")})
     first = db.execute("SELECT MIN(first_seen) FROM ships").fetchone()[0]
     last_ok = db.execute("SELECT value FROM state WHERE key='last_ok'").fetchone()
     return {"ships": out, "changes": changes, "trackingSince": first, "checkedAt": json.loads(last_ok[0]) if last_ok

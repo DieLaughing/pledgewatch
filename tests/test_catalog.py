@@ -61,3 +61,33 @@ def test_loose_loaner_names():
     assert catalog._same("g12", "g12r") and catalog._same("genesis starliner", "genesis")
     assert catalog._same("kraken", "kraken privateer") and not catalog._same("arrow", "arrastra")
     assert catalog._covers("G12 Variants") == ["g12"]
+
+
+def _row(name, status):
+    return catalog._ship({"name": name, "production_status": status, "manufacturer": {"name": "M"}, "url": "/x"})
+
+
+def test_status_and_loaner_changes(tmp_path):
+    db = store_db.connect(str(tmp_path / "s.db"))
+    assert catalog.apply(db, [_row("Kraken", "in-concept")], [("Kraken", ["kraken"], "Caterpillar")], 1) == []
+    events = catalog.apply(db, [_row("Kraken", "flight-ready"), _row("Ironclad", "in-concept")],
+                           [("Kraken", ["kraken"], "Caterpillar, Buccaneer")], 2)
+    got = {(e["kind"], e["name"], e["was"], e["now"]) for e in events}
+    assert got == {("status", "Kraken", "In concept", "Flight ready"), ("status", "Ironclad", "", "In concept"),
+                   ("loaners", "Kraken", "Caterpillar", "Caterpillar, Buccaneer")}
+    m = message(events[0], 2)
+    assert m["embeds"][0]["author"]["name"] in ("Now flight ready", "New ship", "Loaners changed")
+
+
+def test_big_batches_are_logged_not_posted(tmp_path):
+    db = store_db.connect(str(tmp_path / "s.db"))
+    catalog.apply(db, [_row("A", "in-concept")], [], 1)
+    catalog.apply(db, [_row("A", "in-concept")] + [_row(f"S{i}", "in-concept") for i in range(20)], [], 2)
+    posted = {r[0] for r in db.execute("SELECT posted FROM events")}
+    assert posted == {'{"discord": "skipped", "fluxer": "skipped"}'}
+
+
+def test_preorder_label(tmp_path):
+    e = {"kind": "new", "name": "Kraken", "url": "u", "image": "", "price": 165000, "limited": True, "level": "high"}
+    label = message(e, 1, info={"status": "In concept", "loaners": "Caterpillar"})["embeds"][0]["author"]["name"]
+    assert label == "New in store · Pre-order · Limited"

@@ -9,7 +9,7 @@ MAX_WATCHES = 20
 ACCESS_NOTE = "-# I only see the public store, the one you see when logged out. Concierge and subscriber early access isn't visible to me."
 
 # Changes that ping the people watching a ship.
-WATCH_KINDS = {"new", "back", "restock", "low", "price"}
+WATCH_KINDS = {"new", "back", "restock", "low", "price", "status", "loaners"}
 
 
 def norm(s):

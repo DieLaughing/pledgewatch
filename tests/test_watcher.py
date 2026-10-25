@@ -48,7 +48,7 @@ def test_one_missed_read_is_forgiven(tmp_path):
 def test_sold_out_low_restock_price(tmp_path):
     idris = ship("9", "Idris-P", 150000, limited=True, level="high")
     db = fresh(tmp_path, BASE + [idris])
-    assert kinds(check(db, BASE + [{**idris, "level": "medium"}], now=2)) == [("low", "Idris-P")]
+    assert kinds(check(db, BASE + [{**idris, "level": "low"}], now=2)) == [("low", "Idris-P")]
     assert kinds(check(db, BASE + [{**idris, "available": False}], now=3)) == [("sold_out", "Idris-P")]
     assert kinds(check(db, BASE + [idris], now=4)) == [("restock", "Idris-P")]
     events = check(db, [{**BASE[0], "price": 54000}] + BASE[1:] + [idris], now=5)

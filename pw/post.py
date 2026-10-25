@@ -25,6 +25,8 @@ KINDS = {
     "sold_out":   ("Sold out",              0xEF5F6B, False),
     "gone":       ("Left the store",        0xEF5F6B, False),
     "price":      ("Price change",          0x8F8CF2, False),
+    "status":     ("Flight status changed", 0x5B8DEF, False),
+    "loaners":    ("Loaners changed",       0x5B8DEF, False),
     "store_down": ("Can't read the store",  0x8B97A8, False),
     "store_ok":   ("Store readable again",  0x8B97A8, False),
 }
@@ -78,6 +80,11 @@ def message(e, ts, role=None, users=(), info=None):
         return {"embeds": [{"title": label, "description": text, "color": colour, "timestamp": _iso(ts)}],
                 "allowed_mentions": {"parse": []}}
 
+    if e["kind"] in ("status", "loaners"):
+        return _matrix_message(e, ts, label, colour, users)
+    info = info or {}
+    if e["kind"] in ("new", "back") and info.get("status") and info["status"] != "Flight ready":
+        label += " · Pre-order"
     if e.get("limited") and e["kind"] in ("new", "back", "restock", "low"):
         label += " · Limited"
     fields = [{"name": "Price", "value": money(e["price"]), "inline": True}]
@@ -93,7 +100,6 @@ def message(e, ts, role=None, users=(), info=None):
     if e["kind"] == "back" and e.get("last_seen"):
         fields.append({"name": "Last seen", "value": ago(e["last_seen"], ts), "inline": True})
 
-    info = info or {}
     if info.get("status") and info["status"] != "Flight ready":
         fields.append({"name": "Status", "value": info["status"], "inline": True})
     if info.get("loaners") and info.get("status") != "Flight ready":
@@ -108,6 +114,28 @@ def message(e, ts, role=None, users=(), info=None):
     if roles or users:
         msg["content"] = " ".join([f"<@&{r}>" for r in roles] + [f"<@{u}>" for u in users])
         msg["allowed_mentions"] = {"roles": roles, "users": list(users)}
+    return msg
+
+
+def _matrix_message(e, ts, label, colour, users):
+    """A ship's flight status or loaners changed in RSI's Ship Matrix / Loaner Ship Matrix."""
+    if e["kind"] == "status":
+        label = "Now flight ready" if e["now"] == "Flight ready" else ("New ship" if not e["was"] else label)
+        fields = [{"name": "Status", "value": f"{e['was']} → {e['now']}" if e["was"] else e["now"], "inline": True}]
+        source = "RSI Ship Matrix"
+    else:
+        fields = [{"name": "Loaners now", "value": e["now"] or "None listed (likely flight ready)", "inline": False}]
+        if e["was"]:
+            fields.append({"name": "Was", "value": e["was"], "inline": False})
+        source = "RSI Loaner Ship Matrix"
+    embed = {"author": {"name": label}, "title": e["name"], "color": colour, "fields": fields,
+             "footer": {"text": source}, "timestamp": _iso(ts)}
+    if e.get("url"):
+        embed["url"] = e["url"]
+    msg = {"embeds": [embed], "allowed_mentions": {"parse": []}}
+    if users:
+        msg["content"] = " ".join(f"<@{u}>" for u in users)
+        msg["allowed_mentions"] = {"roles": [], "users": list(users)}
     return msg
 
 

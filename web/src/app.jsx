@@ -17,6 +17,7 @@ const SORTS = {
 const KIND = {
   new: ["Came in", "good"], back: ["Back", "good"], restock: ["Restocked", "good"], low: ["Low stock", "warn"],
   sold_out: ["Sold out", "bad"], gone: ["Left the store", "bad"], price: ["Price", "info"],
+  status: ["Flight status", "info"], loaners: ["Loaners", "info"],
 };
 
 const money = (c) => (c == null ? "" : "$" + (c / 100).toLocaleString("en-US", { maximumFractionDigits: c % 100 ? 2 : 0 }));
@@ -165,7 +166,8 @@ export function App({ data }) {
         <p>
           Fan project, not affiliated with Cloud Imperium or Roberts Space Industries. Prices are the public store in US
           dollars before tax, as seen logged out, so Concierge and subscriber early access isn't included. Checked every 5
-          minutes. Ship details from RSI's Ship Matrix and Loaner Ship Matrix.
+          minutes. Ship details from RSI's Ship Matrix and Loaner Ship Matrix. Cargo grids from{" "}
+          <a href="https://sc-cargo.space" target="_blank" rel="noopener">sc-cargo.space</a> (<a href="https://github.com/sccargospace/sc-cargo.space/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>).
         </p>
         <p>No accounts, no cookies, no tracking. <a href="/ships.json">The data as JSON</a>.</p>
       </footer>
@@ -175,13 +177,20 @@ export function App({ data }) {
 
 function Ship({ ship: s, now }) {
   const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
-  const specs = [s.maker, s.role, s.size, s.crew && `crew ${s.crew}`].filter(Boolean).join(" · ");
+  const anchor = s.key.replace(/ /g, "-");
+  const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
+  useEffect(() => { if (open && location.hash === `#${anchor}`) document.getElementById(anchor)?.scrollIntoView(); }, []);
+  const specs = [s.maker, s.role, s.size, s.crew && `crew ${s.crew}`, s.cargo ? `${s.cargo.toLocaleString("en-US")} SCU` : ""]
+    .filter(Boolean).join(" · ");
   const notFlyable = s.status && s.status !== "Flight ready";
   return (
-    <li class={`ship${s.inStore ? "" : " off"}`}>
+    <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
       {s.img ? <img src={s.img} alt="" width="160" height="90" loading="lazy" decoding="async" /> : <div class="noimg" />}
       <div class="info">
-        <h2>{s.rsi ? <a href={s.rsi} target="_blank" rel="noopener">{s.name}</a> : s.name}</h2>
+        <h2>
+          {s.rsi ? <a href={s.rsi} target="_blank" rel="noopener">{s.name}</a> : s.name}
+          <a class="here" href={`#${anchor}`} aria-label={`Link to ${s.name}`}>#</a>
+        </h2>
         <p class="specs">{specs}</p>
         {notFlyable ? (
           <p class="status">
@@ -189,7 +198,13 @@ function Ship({ ship: s, now }) {
             {s.loaners ? ` Loaners: ${s.loaners}` : ""}
           </p>
         ) : null}
+        {s.grid ? (
+          <button type="button" class="link grid-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? "Hide cargo grid" : "Cargo grid"}
+          </button>
+        ) : null}
       </div>
+      {open && s.grid ? <Grid grid={s.grid} /> : null}
       <div class="buy">
         {s.editions.filter((e) => e.inStore).map((e) => <Edition e={e} standard={standard} />)}
         {!s.inStore ? (
@@ -200,6 +215,31 @@ function Ship({ ship: s, now }) {
         ) : null}
       </div>
     </li>
+  );
+}
+
+// Top-down floor plan of the cargo grid. Taller stacks are drawn darker. Data: sc-cargo.space (MIT).
+function Grid({ grid }) {
+  const b = grid.boxes;
+  const minX = Math.min(...b.map((x) => x[0])), minZ = Math.min(...b.map((x) => x[1]));
+  const maxX = Math.max(...b.map((x) => x[0] + x[3])), maxZ = Math.max(...b.map((x) => x[1] + x[4]));
+  const maxH = Math.max(...b.map((x) => x[2] + x[5]));
+  const w = maxX - minX, h = maxZ - minZ, pad = Math.max(w, h) * 0.02;
+  return (
+    <figure class="grid">
+      <svg viewBox={`${minX - pad} ${minZ - pad} ${w + pad * 2} ${h + pad * 2}`} role="img"
+        aria-label={`Cargo grid, ${grid.scu} SCU, seen from above`} preserveAspectRatio="xMidYMid meet">
+        {b.map(([x, z, y, bw, bl, bh]) => (
+          <rect x={x} y={z} width={bw} height={bl} style={`fill-opacity:${0.25 + 0.6 * ((y + bh) / maxH)}`}>
+            <title>{`${bw} × ${bl} × ${bh} SCU box`}</title>
+          </rect>
+        ))}
+      </svg>
+      <figcaption>
+        {grid.scu.toLocaleString("en-US")} SCU{grid.concept ? " · concept layout" : ""}, seen from above. Darker = taller stacks.{" "}
+        <a href={grid.viewer} target="_blank" rel="noopener">3D view on sc-cargo.space</a>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -237,11 +277,15 @@ function Changes({ data, now }) {
           <li>
             <time datetime={new Date(c.ts * 1000).toISOString()}>{ago(c.ts, now)}</time>
             <span class={`pill ${tone}`}>{label}</span>
-            <a href={c.url} target="_blank" rel="noopener">{c.name}</a>
-            <span class="amt">
-              {c.kind === "price" && c.was ? <s>{money(c.was)}</s> : null}
-              {money(c.price)}
-            </span>
+            {c.url ? <a href={c.url} target="_blank" rel="noopener">{c.name}</a> : <span class="nm">{c.name}</span>}
+            {c.kind === "status" || c.kind === "loaners" ? (
+              <span class="amt txt">{c.was ? `${c.was} → ` : ""}{c.now || "none listed"}</span>
+            ) : (
+              <span class="amt">
+                {c.kind === "price" && c.was ? <s>{money(c.was)}</s> : null}
+                {money(c.price)}
+              </span>
+            )}
           </li>
         );
       })}

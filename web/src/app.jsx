@@ -276,25 +276,37 @@ function Details({ s, rate, version }) {
   const pledge = Math.min(...s.editions.filter((e) => e.inStore).map((e) => e.price), Infinity);
   const lastPrice = s.history?.length ? s.history[s.history.length - 1][1] * 100 : 0;
   const dollars = (Number.isFinite(pledge) ? pledge : lastPrice) / 100;
-  const buy = low(s.buy);
-  const wb = (s.history || []).filter((h) => h[2]);
+  const buy = low(s.buy), rent = low(s.rent);
+  const history = s.history || [];
+  const wb = history.filter((h) => h[2]);
   const lowestWb = wb.length ? wb.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
   const lastWb = wb.length ? wb[wb.length - 1] : null;
+  const std = history.filter((h) => !h[2] && h[3] === "store");
+  const lastStd = std.length ? std[std.length - 1] : null;
+  const [all, setAll] = useState(false);
+  const rows = [...history].reverse();
+  const shownRows = all ? rows : rows.slice(0, 8);
   const month = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+  const storeIns = s.editions.filter((e) => e.inStore && e.insurance);
   return (
     <div class="details">
       <section>
         <h3>In game</h3>
         {buy ? (
-          <>
-            <p><b>Buy for {auec(buy)}</b> at {s.buy.find((x) => x[0] === buy)[1]}{s.buy.length > 1 ? `, or ${s.buy.length - 1} other place${s.buy.length > 2 ? "s" : ""}` : ""}.</p>
-            <p>At {auec(rate)} an hour that's <b>about {hours(buy / rate)}</b> of play
-              {dollars ? `, or roughly ${Math.round(buy / dollars).toLocaleString("en-US")} aUEC for each dollar of its $${dollars.toLocaleString("en-US")} pledge price` : ""}.</p>
-          </>
+          <dl class="facts">
+            <dt>Buy</dt><dd><b>{auec(buy)}</b> at {s.buy.find((x) => x[0] === buy)[1]}</dd>
+            <dt>Your time</dt><dd>about <b>{hours(buy / rate)}</b> at {auec(rate)} an hour</dd>
+            {dollars ? <><dt>Value</dt><dd>{Math.round(buy / dollars).toLocaleString("en-US")} aUEC per pledge dollar (${dollars.toLocaleString("en-US")})</dd></> : null}
+            {rent ? <><dt>Rent</dt><dd><b>{auec(rent)}</b> a day at {s.rent.find((x) => x[0] === rent)[1]}{s.rent.length > 1 ? `, ${s.rent.length} places` : ""}</dd></> : null}
+          </dl>
+        ) : rent ? (
+          <dl class="facts">
+            <dt>Buy</dt><dd class="muted">Not sold in game right now</dd>
+            <dt>Rent</dt><dd><b>{auec(rent)}</b> a day at {s.rent.find((x) => x[0] === rent)[1]}{s.rent.length > 1 ? `, ${s.rent.length} places` : ""}</dd>
+          </dl>
         ) : (
-          <p>Not sold in game right now. New ships usually reach the pledge store long before they're sold in game.</p>
+          <p class="muted">Not sold or rented in game right now. New ships usually reach the pledge store long before they're sold in game.</p>
         )}
-        {s.rent ? <p>Rent from <b>{auec(low(s.rent))}</b> a day at {s.rent.find((x) => x[0] === low(s.rent))[1]}{s.rent.length > 1 ? ` (${s.rent.length} places)` : ""}.</p> : null}
         {s.buy && s.buy.length > 1 ? (
           <ul class="where">{s.buy.map(([p, t]) => <li><span>{t}</span><span>{auec(p)}</span></li>)}</ul>
         ) : null}
@@ -302,32 +314,44 @@ function Details({ s, rate, version }) {
 
       <section>
         <h3>Insurance</h3>
-        {s.insurance ? (
-          <p>Claim takes <b>{s.insurance.claim} min</b>. Expedite: {s.insurance.expedite} min for <b>{s.insurance.expediteCost.toLocaleString("en-US")} aUEC</b>.
-            {version ? <span class="muted"> Game {version}.</span> : null}</p>
-        ) : <p class="muted">No claim times known for this ship yet.</p>}
-        {s.editions.some((e) => e.inStore && e.insurance) ? (
-          <p>In the store: {s.editions.filter((e) => e.inStore && e.insurance).map((e) => `${e.label} ${e.insurance === "Lifetime" ? "lifetime" : e.insurance}`).join(", ")}.</p>
-        ) : null}
-        {s.loaners ? <p>Loaners until it flies: {s.loaners}.</p> : null}
+        <dl class="facts">
+          {s.insurance ? (
+            <>
+              <dt>Claim</dt><dd><b>{s.insurance.claim} min</b></dd>
+              <dt>Expedite</dt><dd><b>{s.insurance.expedite} min</b> for {s.insurance.expediteCost.toLocaleString("en-US")} aUEC</dd>
+            </>
+          ) : <><dt>Claim</dt><dd class="muted">No times known yet</dd></>}
+          {storeIns.length ? <><dt>From the store</dt><dd>{storeIns.map((e) => `${e.label}: ${e.insurance === "Lifetime" ? "lifetime" : e.insurance}`).join(" · ")}</dd></> : null}
+          {s.loaners ? <><dt>Loaners</dt><dd>{s.loaners}</dd></> : null}
+        </dl>
+        {version && s.insurance ? <p class="muted small">Claim times from game version {version}.</p> : null}
       </section>
 
-      {s.history && s.history.length ? (
-        <section>
+      {history.length ? (
+        <section class="wide">
           <h3>Price history</h3>
-          <p>
-            {lowestWb ? <>Lowest warbond <b>${lowestWb[1]}</b> ({month(lowestWb[0])}), last warbond <b>${lastWb[1]}</b> ({month(lastWb[0])}).</> : "No warbond seen for this ship."}
-          </p>
-          <ul class="hist">
-            {[...s.history].reverse().slice(0, 12).map(([d, p, w, src]) => (
-              <li>
-                <span>{month(d)}</span>
-                <span class={w ? "wb" : ""}>{w ? "Warbond" : "Standard"}{src === "upgrade" ? <i> upgrade</i> : null}</span>
-                <span>${p.toLocaleString("en-US")}</span>
-              </li>
-            ))}
-          </ul>
-          <p class="muted small">"Upgrade" rows are the ship's value in RSI's upgrade (CCU) store, which can differ from the store price.</p>
+          <div class="stats">
+            {lastStd ? <div><span>Standard now</span><b>${lastStd[1].toLocaleString("en-US")}</b></div> : null}
+            <div><span>Lowest warbond</span><b>{lowestWb ? `$${lowestWb[1].toLocaleString("en-US")}` : "never seen"}</b>{lowestWb ? <i>{month(lowestWb[0])}</i> : null}</div>
+            {lastWb ? <div><span>Last warbond</span><b>${lastWb[1].toLocaleString("en-US")}</b><i>{month(lastWb[0])}</i></div> : null}
+          </div>
+          <div class="table-wrap">
+            <table class="hist">
+              <thead><tr><th>Seen</th><th>Edition</th><th>Where</th><th class="num">Price</th></tr></thead>
+              <tbody>
+                {shownRows.map(([d, p, w, src]) => (
+                  <tr>
+                    <td>{month(d)}</td>
+                    <td class={w ? "wb" : ""}>{w ? "Warbond" : "Standard"}</td>
+                    <td class="muted">{src === "upgrade" ? "Upgrade store" : "Pledge store"}</td>
+                    <td class="num">${p.toLocaleString("en-US")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > 8 ? <button type="button" class="link" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${rows.length}`}</button> : null}
+          <p class="muted small">Upgrade store prices are what the ship is worth as a CCU target, which can differ from buying it outright.</p>
         </section>
       ) : null}
 

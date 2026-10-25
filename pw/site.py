@@ -127,6 +127,41 @@ def _img_id(url):
     return hashlib.sha1(url.encode()).hexdigest()[:16]
 
 
+# View channels, send messages, embed links, read history, mention roles (so role pings work even when the role
+# isn't set to mentionable).
+INVITE_PERMISSIONS = 216064
+
+PRIVACY = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy · Pledge Watch</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="color-scheme" content="light dark">
+<style>body{max-width:42rem;margin:0 auto;padding:32px 16px;font:16px/1.6 system-ui,sans-serif}
+h1{font-size:26px}h2{font-size:18px;margin-top:28px}a{color:#b26b00}code{font-size:14px}</style></head><body>
+<p><a href="/">← Pledge Watch</a></p>
+<h1>Privacy</h1>
+<p>Pledge Watch is a fan project that tracks the public RSI pledge store. It has no accounts, sets no cookies and runs no
+analytics on this website.</p>
+<h2>The website</h2>
+<p>Pages are served through Cloudflare, which sees visitors' IP addresses to deliver and protect the site, as any
+Cloudflare site does. Pledge Watch itself keeps no visitor logs. Your "aUEC an hour" figure is stored only in your own
+browser.</p>
+<h2>The Discord and Fluxer bot</h2>
+<p>It stores only what it needs to work:</p>
+<ul>
+<li>For each server that runs <code>/alerts setup</code>: the server, channel and (optional) role IDs.</li>
+<li>For each <code>/watch</code>: your user ID, the ship name you typed, and which server you ran it in.</li>
+</ul>
+<p>It doesn't read messages in your server (Discord doesn't send it any, and on Fluxer it only answers commands that
+start with <code>!</code> in its own channel), and it never stores message content, names or avatars.</p>
+<h2>Deleting your data</h2>
+<ul>
+<li><code>/unwatch all</code> deletes all your watches.</li>
+<li><code>/alerts off</code> stops alerts in a server; removing the bot from a server deletes that server's settings
+and every watch made in it.</li>
+</ul>
+<p>Nothing is sold or shared. Questions: open an issue or message the owner in the InPints Discord.</p>
+</body></html>"""
+
+
 class Site:
     def __init__(self, path, dist):
         from . import db as store_db
@@ -141,6 +176,10 @@ class Site:
     def refresh(self):
         """Rebuild the page from the database. Called at start and after every store check."""
         data = build(self.db)
+        app_id = os.environ.get("DISCORD_APP_ID", "")
+        if app_id:
+            data["invite"] = (f"https://discord.com/oauth2/authorize?client_id={app_id}&permissions={INVITE_PERMISSIONS}"
+                              "&integration_type=0&scope=bot+applications.commands")
         self.images = {}
         for c in self.db.execute("SELECT image FROM catalog UNION SELECT image FROM ships"):
             if c[0]:
@@ -191,6 +230,9 @@ class Site:
             return web.FileResponse(os.path.join(self.dist, name), headers={"Cache-Control": "public, max-age=604800"})
         return handler
 
+    async def privacy(self, request):
+        return web.Response(text=PRIVACY, content_type="text/html", headers={"Cache-Control": "public, max-age=3600"})
+
     async def health(self, request):
         return web.Response(text="ok")
 
@@ -200,6 +242,7 @@ class Site:
         app.router.add_get("/ships.json", self.ships_json)
         app.router.add_get("/img/{id:[0-9a-f]{16}}.jpg", self.image)
         app.router.add_get("/healthz", self.health)
+        app.router.add_get("/privacy", self.privacy)
         for name in ("favicon.svg", "favicon.ico", "apple-touch-icon.png"):
             app.router.add_get(f"/{name}", self._file(name))
         app.router.add_static("/assets", os.path.join(self.dist, "assets"), append_version=False)

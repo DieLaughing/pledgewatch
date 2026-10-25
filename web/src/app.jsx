@@ -133,6 +133,16 @@ export function App({ data }) {
         </h1>
       </section>
 
+      {data.invite ? (
+        <aside class="invite">
+          <div>
+            <b>Store alerts in your Discord</b>
+            <span>Pledge Watch posts when ships come in, sell out or change price, and pings people for the ships they <code>/watch</code>. After adding it, an admin runs <code>/alerts setup</code> to pick the channel.</span>
+          </div>
+          <a class="btn" href={data.invite} target="_blank" rel="noopener">Add to Discord</a>
+        </aside>
+      ) : null}
+
       <nav class="tabs" aria-label="View">
         {[["store", `In the store · ${inStore.length}`], ["all", `All ships · ${ships.length}`], ["changes", `Changes · ${data.changes.length}`]].map(([v, label]) => (
           <button type="button" aria-pressed={st.view === v} onClick={() => set({ view: v })}>{label}</button>
@@ -205,7 +215,7 @@ export function App({ data }) {
           (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>)
           {data.gameVersion ? `, game version ${data.gameVersion}` : ""}. Your aUEC-an-hour figure stays in your browser.
         </p>
-        <p>No accounts, no cookies, no tracking. <a href="/ships.json">The data as JSON</a>.</p>
+        <p>No accounts, no cookies, no tracking. <a href="/privacy">Privacy</a> · <a href="/ships.json">The data as JSON</a>.</p>
       </footer>
     </div>
   );

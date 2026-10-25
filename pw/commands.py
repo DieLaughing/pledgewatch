@@ -20,7 +20,7 @@ def matches(query, name):
     return norm(query) in norm(name)
 
 
-def watch(db, platform, user, query, now=None):
+def watch(db, platform, user, query, now=None, guild=""):
     q = norm(query)
     if len(q) < 2:
         return "Give me at least two letters of a ship name, like `Idris` or `Carrack`."
@@ -28,6 +28,8 @@ def watch(db, platform, user, query, now=None):
         return "That's a long name. Try a shorter part of it, like `Polaris`."
     mine = _mine(db, platform, user)
     if q in mine:
+        with db:  # pings follow you to the server you last asked from
+            db.execute("UPDATE watches SET guild_id=? WHERE platform=? AND user_id=? AND query=?", (guild, platform, user, q))
         return f"You're already watching **{q}**. " + _now_line(db, q)
     if len(mine) >= MAX_WATCHES:
         return f"You're watching {MAX_WATCHES} ships, which is the limit. Remove one with `unwatch` first."
@@ -35,8 +37,8 @@ def watch(db, platform, user, query, now=None):
     if unknown and (dym := _did_you_mean(db, q)):
         return f"I don't know a ship called **{q}**. {dym} I didn't save it, so try again with the right name."
     with db:
-        db.execute("INSERT INTO watches (platform, user_id, query, created) VALUES (?,?,?,?)",
-                   (platform, user, q, int(now or time.time())))
+        db.execute("INSERT INTO watches (platform, user_id, query, created, guild_id) VALUES (?,?,?,?,?)",
+                   (platform, user, q, int(now or time.time()), guild))
     reply = (f"Watching **{q}**. I'll ping you when a ship matching it comes into the public store, restocks, "
              f"runs low or changes price.\n" + _now_line(db, q))
     if unknown:
@@ -111,11 +113,11 @@ def names(db, current, limit=25):
     return out[:limit]
 
 
-def watchers(db, platform, event):
-    """User ids on `platform` who should be pinged for this event."""
+def watchers(db, platform, event, guild=""):
+    """User ids on `platform` to ping for this event in `guild` (the server each person ran watch from)."""
     if event["kind"] not in WATCH_KINDS or not event.get("name"):
         return []
-    rows = db.execute("SELECT user_id, query FROM watches WHERE platform=?", (platform,)).fetchall()
+    rows = db.execute("SELECT user_id, query FROM watches WHERE platform=? AND guild_id=?", (platform, guild)).fetchall()
     return sorted({r[0] for r in rows if matches(r[1], event["name"])})
 
 
@@ -125,6 +127,10 @@ HELP = """**Pledge Watch** posts changes in the public RSI pledge store: ships c
 `{p}watching`: what I'm watching for you
 `{p}store [ship]`: is it in the store right now?
 """ + ACCESS_NOTE
+
+
+ADMIN_HELP = """
+**Server admins:** `/alerts setup` picks the channel for store alerts (and an optional role to ping), `/alerts status` shows it, `/alerts off` stops them. Add Pledge Watch to another server from https://pledgewatch.inpints.com"""
 
 
 def _mine(db, platform, user):

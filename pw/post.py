@@ -33,25 +33,32 @@ KINDS = {
 
 
 class App:
-    def __init__(self, name, api, token, channel, role):
-        self.name, self.api, self.token, self.channel, self.role = name, api, token, channel, role
+    """Sends messages for one chat app. Which channels it posts to comes from the servers table."""
 
-    def send(self, message):
-        req = urllib.request.Request(f"{self.api}/channels/{self.channel}/messages", data=json.dumps(message).encode(),
+    def __init__(self, name, api, token):
+        self.name, self.api, self.token = name, api, token
+
+    def send(self, channel, message, retry=True):
+        req = urllib.request.Request(f"{self.api}/channels/{channel}/messages", data=json.dumps(message).encode(),
                                      headers={"Authorization": f"Bot {self.token}", "Content-Type": "application/json",
-                                              "User-Agent": "PledgeWatch (https://github.com/DieLaughing/pledgewatch)"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return json.load(r)
+                                              "User-Agent": "PledgeWatch (https://pledgewatch.inpints.com)"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and retry:  # slow down: wait as long as the app asks, then try once more
+                wait = float(json.loads(e.read() or b"{}").get("retry_after", 2))
+                time.sleep(min(wait, 30))
+                return self.send(channel, message, retry=False)
+            raise
 
 
 def apps_from_env(env=os.environ):
     apps = []
     if env.get("DISCORD_TOKEN"):
-        apps.append(App("discord", "https://discord.com/api/v10", env["DISCORD_TOKEN"], env["DISCORD_CHANNEL_ID"],
-                        env.get("DISCORD_ROLE_ID")))
+        apps.append(App("discord", "https://discord.com/api/v10", env["DISCORD_TOKEN"]))
     if env.get("FLUXER_TOKEN"):
-        apps.append(App("fluxer", env["FLUXER_API"].rstrip("/") + "/api/v1", env["FLUXER_TOKEN"],
-                        env["FLUXER_CHANNEL_ID"], env.get("FLUXER_ROLE_ID")))
+        apps.append(App("fluxer", env["FLUXER_API"].rstrip("/") + "/api/v1", env["FLUXER_TOKEN"]))
     return apps
 
 
@@ -144,22 +151,36 @@ def _iso(ts):
 
 
 def flush(db, apps, now=None):
-    """Post every event that hasn't reached every app yet. Safe to call after each check."""
+    """Post every event to every active server that hasn't had it yet. Safe to call after each check.
+    A server that has blocked the bot (no access to its channel, channel deleted) is switched off, not retried."""
+    from . import servers
     from .catalog import info
     from .commands import watchers
     now = int(now or time.time())
+    by_name = {a.name: a for a in apps}
+    dests = [d for d in servers.active(db) if d["platform"] in by_name]
     rows = db.execute("SELECT id, ts, data, posted FROM events WHERE ts >= ? ORDER BY id", (now - MAX_AGE,)).fetchall()
+    off = set()
     for row in rows:
         posted = json.loads(row["posted"])
         e = json.loads(row["data"])
-        for app in apps:
-            if app.name in posted:
-                continue
+        ship = info(db, e.get("name", ""))
+        for d in dests:
+            key = f"{d['platform']}:{d['guild_id']}"
+            if key in posted or key in off or d["added"] > row["ts"] or d["platform"] in posted:
+                continue  # done, switched off this round, set up after the event, or posted before per-server keys
             try:
-                msg = message(e, row["ts"], app.role, watchers(db, app.name, e), info(db, e.get("name", "")))
-                posted[app.name] = app.send(msg).get("id", True)
+                msg = message(e, row["ts"], d["role_id"] or None, watchers(db, d["platform"], e, d["guild_id"]), ship)
+                posted[key] = by_name[d["platform"]].send(d["channel_id"], msg).get("id", True)
+            except urllib.error.HTTPError as err:
+                detail = err.read().decode(errors="replace")[:200]
+                if err.code in (403, 404):
+                    servers.switch_off(db, d["platform"], d["guild_id"], f"HTTP {err.code}: {detail}")
+                    off.add(key)
+                    log.warning("switched off %s: can't post to its channel (%s)", key, err.code)
+                else:
+                    log.warning("couldn't post %s to %s: %s %s", e["kind"], key, err, detail)
             except (urllib.error.URLError, TimeoutError, ValueError) as err:
-                detail = err.read().decode(errors="replace")[:200] if isinstance(err, urllib.error.HTTPError) else ""
-                log.warning("couldn't post %s to %s: %s %s", e["kind"], app.name, err, detail)
+                log.warning("couldn't post %s to %s: %s", e["kind"], key, err)
         with db:
             db.execute("UPDATE events SET posted=? WHERE id=?", (json.dumps(posted), row["id"]))

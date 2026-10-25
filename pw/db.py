@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS catalog (
   size TEXT, min_crew INTEGER, max_crew INTEGER, cargo REAL, length REAL, image TEXT, url TEXT, mid TEXT
 );
 CREATE TABLE IF NOT EXISTS loaners (ship TEXT PRIMARY KEY, keys TEXT NOT NULL, loaners TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS servers (
+  platform TEXT NOT NULL, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, role_id TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1, note TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL,
+  PRIMARY KEY (platform, guild_id)
+);
 CREATE TABLE IF NOT EXISTS ingame (
   mid TEXT PRIMARY KEY, uuid TEXT, claim REAL, expedite REAL, expedite_cost REAL, version TEXT,
   history TEXT NOT NULL, buy TEXT NOT NULL, rent TEXT NOT NULL, name TEXT
@@ -43,6 +48,8 @@ def connect(path, check_same_thread=True):
     if cat and "mid" not in cat:  # older, smaller ship list: it's rebuilt from RSI on the next check
         db.executescript("DROP TABLE catalog; DELETE FROM state WHERE key='catalog_at';")
     db.executescript(SCHEMA)
+    if "guild_id" not in {r["name"] for r in db.execute("PRAGMA table_info(watches)")}:
+        db.execute("ALTER TABLE watches ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''")
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
     for col, kind in (("qty", "INTEGER"), ("warbond", "INTEGER"), ("insurance", "TEXT"), ("ship_id", "TEXT"),
                       ("extras", "TEXT")):

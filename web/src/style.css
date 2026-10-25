@@ -53,6 +53,12 @@ button, input, select { font: inherit; color: inherit; }
 .lede b { color: var(--accent); font-weight: 750; }
 .lede span { color: var(--muted); font-weight: 450; }
 
+.invite { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.invite div { display: grid; gap: 2px; min-width: 0; flex: 1 1 320px; }
+.invite span { color: var(--muted); font-size: 14px; }
+.invite code { font: 13px var(--mono); color: var(--fg); }
+.btn { display: inline-block; padding: 9px 16px; border-radius: 8px; background: #5865f2; color: #fff; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.btn:hover { background: #4752c4; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; color: var(--muted); cursor: pointer; white-space: nowrap; font-size: 14px; }
 .tabs button[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }

@@ -6,7 +6,7 @@ const FILTERS = [
   ["lti", "Lifetime insurance", (s) => s.editions.some((e) => e.inStore && e.insurance === "Lifetime")],
   ["buyable", "Buy in game", (s) => !!s.buy],
   ["rentable", "Rent in game", (s) => !!s.rent],
-  ["sale", "On sale", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice)],
+  ["sale", "Discounted", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice)],
   ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited)],
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
 ];
@@ -72,7 +72,24 @@ function writeUrl(s) {
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
 
-export function App({ data }) {
+// While the tab stays open, fetch fresh data every 5 minutes and when the tab comes back into view, so an old tab
+// never shows hour-old prices. Cloudflare caches /ships.json for a minute, so this costs the server almost nothing.
+const REFRESH_MS = 5 * 60 * 1000;
+
+export function App({ data: first }) {
+  const [data, setData] = useState(first);
+  useEffect(() => {
+    let last = Date.now();
+    const pull = () => {
+      if (document.hidden) return;
+      last = Date.now();
+      fetch("/ships.json").then((r) => (r.ok ? r.json() : null)).then((d) => d && setData(d)).catch(() => {});
+    };
+    const timer = setInterval(pull, REFRESH_MS);
+    const onShow = () => { if (!document.hidden && Date.now() - last > 60 * 1000) pull(); };
+    document.addEventListener("visibilitychange", onShow);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onShow); };
+  }, []);
   const [st, setSt] = useState(readUrl);
   const set = (patch) => setSt((s) => ({ ...s, ...patch }));
   useEffect(() => writeUrl(st), [st]);
@@ -132,7 +149,7 @@ export function App({ data }) {
         <h1>
           <b>{inStore.length} ships</b> in the store.{" "}
           <span>
-            {counts.warbond} with a warbond price, {counts.anniversary} anniversary editions, {counts.sale ? `${counts.sale} on sale` : "nothing on sale"}
+            {counts.warbond} with a warbond price, {counts.anniversary} 10 Year editions, {counts.sale ? `${counts.sale} discounted` : "no discounts right now"}
             {counts.limited ? `, ${counts.limited} limited` : ""}.
           </span>
         </h1>

@@ -5,6 +5,7 @@ import time
 
 from . import db as store_db
 from .diff import diff
+from .post import flush
 from .store import StoreError, fetch
 
 log = logging.getLogger("pledgewatch")
@@ -51,11 +52,12 @@ def _failed(db, reason, now):
     return []
 
 
-def run(path):
+def run(path, apps):
     db = store_db.connect(path)
-    log.info("watching the RSI store every %ds, database %s", INTERVAL, path)
+    log.info("watching the RSI store every %ds, posting to %s", INTERVAL, ", ".join(a.name for a in apps) or "nowhere")
     while True:
         started = time.monotonic()
         for e in check(db):
             log.info("%s: %s", e["kind"], e.get("name", e.get("reason", "")))
+        flush(db, apps)
         time.sleep(max(30, INTERVAL - (time.monotonic() - started)))

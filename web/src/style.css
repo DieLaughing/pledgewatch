@@ -105,9 +105,32 @@ button, input, select { font: inherit; color: inherit; }
 .arms { margin: 4px 0 0; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .gold-note { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
 .gold-note.done { color: var(--wb); }
-.arms-table td { vertical-align: top; }
-.arms-table .small-inline { font-size: 12px; }
-.arms-facts { margin-top: 12px; }
+.loadout { width: 100%; border-collapse: collapse; font-size: 14px; }
+.loadout th, .loadout td { padding: 6px 12px 6px 0; text-align: left; vertical-align: top; }
+.loadout thead th { font-size: 12px; font-weight: 600; color: var(--muted); padding-bottom: 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.loadout .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 0; padding-left: 12px; width: 1%; }
+.loadout thead .num { font-family: var(--sans); }
+.loadout .group th { padding: 14px 0 4px; font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--line); }
+.loadout tbody td { border-bottom: 1px solid var(--line); }
+.loadout tbody tr:last-child td { border-bottom: 0; }
+.loadout .mount { color: var(--muted); white-space: nowrap; width: 1%; }
+.loadout .guns div + div { margin-top: 2px; }
+.loadout .guns b { font-variant-numeric: tabular-nums; }
+.loadout .each { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.loadout .mount-inline, .loadout .stats-inline { display: none; }
+.loadout tfoot th, .loadout tfoot td { border-top: 2px solid var(--line); padding-top: 8px; font-weight: 650; }
+.loadout tfoot tr + tr th, .loadout tfoot tr + tr td { border-top: 0; padding-top: 2px; }
+.loadout tfoot th { font-size: 13px; }
+/* Phones: one column. Each line stacks mount, guns and its damage figures. */
+@media (max-width: 560px) {
+  .loadout thead, .loadout .mount, .loadout .num { display: none; }
+  .loadout .mount-inline { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .loadout .stats-inline { display: block; margin-top: 4px; font: 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); }
+  .loadout th, .loadout td { padding-right: 0; }
+  .loadout tfoot th { font-size: 13px; }
+  .loadout tfoot .stats-inline { font-weight: 600; margin-top: 2px; }
+}
+.arms-facts { margin-top: 14px; }
 
 .grid-toggle { margin-top: 6px; }
 .details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }

@@ -33,23 +33,33 @@ def test_rows_merge_variants_and_join_uex_by_uuid_or_name():
 
 
 def test_weapons_list_every_gun_by_who_fires_it():
-    gun = lambda name, dps: {"name": name, "dps": dps}
-    turret = lambda slave, guns, sizes, dps: {"is_pilot_slaveable": slave, "weapons": guns, "weapon_sizes": sizes,
-                                              "dps_total": dps}
+    gun = lambda name, dps: {"name": name, "dps": dps, "sustained_dps": dps / 2, "alpha": dps / 10}
+
+    def turret(slave, guns, sizes, dps=None, fitted=(), types=()):
+        return {"is_pilot_slaveable": slave, "weapons": guns, "weapon_sizes": sizes, "dps_total": dps,
+                "sustained_dps_total": dps and dps / 2, "alpha_total": dps and dps / 10,
+                "payload_class_names": list(fitted), "payload_types": list(types)}
     v = {"weaponry": {"fixed_weapons": {"weapons": [gun("C-788 Cannon", 800), gun("C-788 Cannon", 800)]},
                       "missiles": {"count": 16}},
-         "turrets": {"manned": [turret(False, [gun("AD4B", 1266)] * 2, [4, 4], 2532)] * 2,
-                     "remote": [turret(True, [gun("M5A Cannon", 680)] * 2, [3, 3], 1360), turret(False, [], [4], 0),
-                                turret(False, [], [], 0)],
+         "turrets": {"manned": [turret(False, [gun("AD4B", 1266)] * 2, [4, 4], 2532)] * 2
+                     + [turret(False, [], [2], fitted=["GRIN_TractorBeam_S2"])],  # tractor beam: left out
+                     "remote": [turret(True, [gun("M5A Cannon", 680)] * 2, [3, 3], 1360),
+                                turret(False, [], [4], fitted=["OCTO"], types=["MissileLauncher.MissileRack"]),
+                                turret(False, [], [4], fitted=["UNLISTED"], types=["MissileLauncher.MissileRack"]),
+                                turret(False, [], [9], fitted=["BEAM_S9"], types=["WeaponGun.Gun"]),
+                                turret(False, [], [5])],  # nothing fitted: left out
                      "pdc": [turret(False, [gun("Swarm", 160)], [1], 160)]},
          "ports": [{"category_label": "Missile & Bomb Racks", "equipped_item_uuid": "r1"}] * 2}
     sizes = {"C-788 Cannon": 4, "AD4B": 4}  # M5A missing from the gun list: the turret's mount size is used
-    racks = {"r1": (8, 2, "missile")}
-    assert weapons(v, sizes, racks) == {
-        "guns": [["pilot", "hardpoints", 1, [[2, 4, "C-788 Cannon"]], 1600],
-                 ["pilot", "remote", 1, [[2, 3, "M5A Cannon"]], 1360],
-                 ["gunner", "manned", 2, [[2, 4, "AD4B"]], 5064],
-                 ["gunner", "remote", 1, [[1, 4, ""]], 0],
-                 ["auto", "pdc", 1, [[1, 1, "Swarm"]], 160]],
-        "pilotDps": 2960, "missiles": [[16, 2, "missile"]], "missileCount": 16}
-    assert weapons({"weaponry": None}, sizes, racks) is None
+    classes = {"BEAM_S9": ("Laser Beam", 9)}
+    racks = {"r1": (8, 2, "missile"), "OCTO": (8, 2, "missile")}
+    assert weapons(v, sizes, classes, racks) == {
+        "guns": [["pilot", "hardpoints", 1, [[2, 4, "C-788 Cannon"]], 1600, 800, 160],
+                 ["both", "remote", 1, [[2, 3, "M5A Cannon"]], 1360, 680, 136],
+                 ["gunner", "remote", 1, [[1, 9, "Laser Beam"]], 0, 0, 0],
+                 ["gunner", "manned", 2, [[2, 4, "AD4B"]], 5064, 2532, 506],
+                 ["gunner", "remote-missile", 1, [[1, 4, "missile rack"]], 0, 0, 0],
+                 ["gunner", "remote-missile", 1, [[8, 2, "missiles"]], 0, 0, 0],
+                 ["auto", "pdc", 1, [[1, 1, "Swarm"]], 160, 80, 16]],
+        "pilot": [2960, 1480, 296], "missiles": [[24, 2, "missile"]], "missileCount": 16}
+    assert weapons({"weaponry": None}, sizes, classes, racks) is None

@@ -28,7 +28,7 @@ const SORTS = {
   size: ["Size, largest first", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
   game: ["In-game price, low to high", (a, b) => (low(a.buy) || 1e15) - (low(b.buy) || 1e15)],
   "game-desc": ["In-game price, high to low", (a, b) => (low(b.buy) || -1) - (low(a.buy) || -1)],
-  pilot: ["Pilot firepower, high to low", (a, b) => (b.weapons?.pilotDps ?? -1) - (a.weapons?.pilotDps ?? -1)],
+  pilot: ["Pilot firepower, high to low", (a, b) => (b.weapons?.pilot[0] ?? -1) - (a.weapons?.pilot[0] ?? -1)],
 };
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
@@ -323,20 +323,26 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-const MOUNT = { hardpoints: "Guns", manned: "crewed turret", remote: "remote turret", pdc: "point-defence turret" };
-const WHO = { pilot: "Pilot", gunner: "Gunners", auto: "Automatic" };
-const MISSILE = { missile: "missile", torpedo: "torpedo", bomb: "bomb" };
+const MOUNT = {
+  hardpoints: "Hardpoints", manned: "crewed turret", remote: "remote turret", pdc: "point-defence turret",
+  "manned-missile": "crewed missile turret", "remote-missile": "remote missile turret",
+};
+const WHO = [["pilot", "Pilot"], ["both", "Pilot or gunner"], ["gunner", "Gunners"], ["auto", "Automatic"]];
+const MISSILE = { missile: ["missile", "missiles"], torpedo: ["torpedo", "torpedoes"], bomb: ["bomb", "bombs"] };
+const num = (n) => (n ? n.toLocaleString("en-US") : "–");
+// The three damage figures as one line, for narrow screens where they don't fit as columns.
+const Stats = ({ d }) => (d[0] ? <span class="stats-inline">{num(d[0])} DPS · {num(d[1])} sustained · {num(d[2])} alpha</span> : null);
 
 // Card summary, e.g. "Pilot: 2× S4 + 2 turrets · Gunners: 2 turrets · 7 PDCs".
 function armsLine(w) {
-  const own = w.guns.find((r) => r[0] === "pilot" && r[1] === "hardpoints");
+  const own = w.guns.find((r) => r[0] === "pilot");
   const sizes = {};
   for (const [n, size] of own ? own[3] : []) sizes[size] = (sizes[size] || 0) + n;
   const guns = Object.entries(sizes).sort((a, b) => b[0] - a[0]).map(([size, n]) => `${n}× S${size}`).join(", ");
-  const turrets = (who, mounts) => w.guns.filter((r) => r[0] === who && mounts.includes(r[1])).reduce((a, r) => a + r[2], 0);
-  const pt = turrets("pilot", ["manned", "remote"]), gt = turrets("gunner", ["manned", "remote"]), pdc = turrets("auto", ["pdc"]);
-  const pilot = [guns, pt && plural(pt, "turret")].filter(Boolean).join(" + ");
-  return [`Pilot: ${pilot || "no guns"}`, gt && `Gunners: ${plural(gt, "turret")}`, pdc && plural(pdc, "PDC")].filter(Boolean).join(" · ");
+  const count = (who) => w.guns.filter((r) => r[0] === who).reduce((a, r) => a + r[2], 0);
+  const pilot = [guns, count("both") && plural(count("both"), "turret")].filter(Boolean).join(" + ");
+  const gunners = count("gunner"), pdc = count("auto");
+  return [`Pilot: ${pilot || "no guns"}`, gunners && `Gunners: ${plural(gunners, "turret")}`, pdc && plural(pdc, "PDC")].filter(Boolean).join(" · ");
 }
 
 function goldText(s) {
@@ -411,39 +417,18 @@ function Details({ s, rate, version }) {
       {w ? (
         <section class="wide">
           <h3>Weapons</h3>
-          {w.guns.length ? (
-            <div class="table-wrap">
-              <table class="hist arms-table">
-                <thead><tr><th>Fired by</th><th>Mount</th><th>Guns</th><th class="num">DPS</th></tr></thead>
-                <tbody>
-                  {w.guns.map(([who, mount, n, each, dps]) => (
-                    <tr>
-                      <td>{who === "pilot" && mount !== "hardpoints" ? "Pilot or gunner" : WHO[who]}</td>
-                      <td>{mount === "hardpoints" ? MOUNT[mount] : plural(n, MOUNT[mount])}</td>
-                      <td>
-                        {each.map(([c, size, name]) => (
-                          <div>{name ? <><b>{c}×</b> S{size} {name}</> : <span class="muted">Empty S{size} mount</span>}</div>
-                        ))}
-                        {n > 1 && mount !== "hardpoints" ? <div class="muted small-inline">on each turret</div> : null}
-                      </td>
-                      <td class="num">{dps ? dps.toLocaleString("en-US") : "–"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <p class="muted">No guns.</p>}
-          <dl class="facts arms-facts">
-            <dt>Pilot alone</dt>
-            <dd>{w.pilotDps ? <><b>{w.pilotDps.toLocaleString("en-US")}</b> damage a second</> : <span class="muted">no guns: the turrets need gunners</span>}</dd>
-            {w.guns.some((r) => r[0] !== "pilot" && r[4]) ? <><dt>Fully crewed</dt><dd><b>{w.guns.reduce((a, r) => a + r[4], 0).toLocaleString("en-US")}</b> damage a second</dd></> : null}
-            {w.missiles.length || w.missileCount ? (
-              <><dt>Missiles</dt><dd>{w.missiles.length
-                ? w.missiles.map(([n, size, kind]) => `${n}× S${size} ${MISSILE[kind]}${n === 1 ? "" : kind === "torpedo" ? "es" : "s"}`).join(", ")
-                : plural(w.missileCount, "missile")}</dd></>
-            ) : null}
-          </dl>
-          <p class="muted small">Stock loadout{version ? ` in game version ${version}` : ""}, from the Star Citizen Wiki.</p>
+          {w.guns.length ? <Arms w={w} /> : <p class="muted">No guns or missile turrets.</p>}
+          {w.missiles.length ? (
+            <dl class="facts arms-facts">
+              <dt>Missiles</dt>
+              <dd>{w.missiles.map(([n, size, kind]) => `${n}× S${size} ${MISSILE[kind][n === 1 ? 0 : 1]}`).join(" · ")}</dd>
+            </dl>
+          ) : null}
+          <p class="muted small">
+            <b>DPS</b> is damage a second while firing, <b>sustained</b> is the average once heat and reloads catch up,
+            and <b>alpha</b> is one volley from every gun on the line. Stock loadout{version ? ` in game version ${version}` : ""},
+            from the Star Citizen Wiki.
+          </p>
         </section>
       ) : null}
 
@@ -482,6 +467,59 @@ function Details({ s, rate, version }) {
         <a href={`https://starcitizen.tools/index.php?search=${encodeURIComponent(s.name)}`} target="_blank" rel="noopener">Star Citizen Wiki</a>
         {s.grid ? <a href={s.grid.viewer} target="_blank" rel="noopener">3D cargo</a> : null}
       </p>
+    </div>
+  );
+}
+
+// Every gun and missile turret, grouped by who fires it, with the damage of each line and totals.
+function Arms({ w }) {
+  const all = [0, 1, 2].map((i) => w.guns.reduce((a, r) => a + r[4 + i], 0));
+  const crewed = w.guns.some((r) => (r[0] === "gunner" || r[0] === "auto") && r[4]);
+  return (
+    <div class="table-wrap">
+      <table class="loadout">
+        <thead>
+          <tr>
+            <th class="mount">Mount</th><th>Guns</th>
+            <th class="num">DPS</th><th class="num">Sustained</th><th class="num">Alpha</th>
+          </tr>
+        </thead>
+        {WHO.map(([who, label]) => {
+          const rows = w.guns.filter((r) => r[0] === who);
+          return rows.length ? (
+            <tbody>
+              <tr class="group"><th colspan="5" scope="rowgroup">{label}</th></tr>
+              {rows.map(([, mount, n, each, dps, sus, alpha]) => {
+                const where = mount === "hardpoints" ? MOUNT[mount] : plural(n, MOUNT[mount]);
+                return (
+                  <tr>
+                    <td class="mount">{where}</td>
+                    <td class="guns">
+                      <span class="mount-inline">{where}</span>
+                      {each.map(([c, size, name]) => <div><b>{c}×</b> {size ? `S${size} ` : ""}{name}</div>)}
+                      {n > 1 && mount !== "hardpoints" ? <span class="each">on each turret</span> : null}
+                      <Stats d={[dps, sus, alpha]} />
+                    </td>
+                    <td class="num">{num(dps)}</td><td class="num">{num(sus)}</td><td class="num">{num(alpha)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          ) : null;
+        })}
+        <tfoot>
+          <tr>
+            <th colspan="2" scope="row">Pilot alone<Stats d={w.pilot} /></th>
+            <td class="num">{num(w.pilot[0])}</td><td class="num">{num(w.pilot[1])}</td><td class="num">{num(w.pilot[2])}</td>
+          </tr>
+          {crewed ? (
+            <tr>
+              <th colspan="2" scope="row">Fully crewed<Stats d={all} /></th>
+              <td class="num">{num(all[0])}</td><td class="num">{num(all[1])}</td><td class="num">{num(all[2])}</td>
+            </tr>
+          ) : null}
+        </tfoot>
+      </table>
     </div>
   );
 }

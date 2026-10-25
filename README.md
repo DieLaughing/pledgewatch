@@ -12,8 +12,8 @@ that posts when ships come in, sell out, change price or leave.
 - **In game vs pledge:** where you can buy or rent the ship for aUEC, how many hours of play that is at your own rate,
   and how much aUEC each pledge dollar is worth.
 - **Insurance claim and expedite times** (and the expedite cost in aUEC), from the game files.
-- **Weapons:** the guns the pilot fires (with sizes, including turrets the pilot can slave), crewed and remote
-  turrets, and missiles, for the stock loadout.
+- **Weapons:** every gun and missile turret by who fires it (pilot, pilot or gunner, gunners, point defence), with sizes,
+  DPS, sustained DPS and alpha, plus missiles and torpedoes, for the stock loadout.
 - **Gold standard:** ships that have had CIG's gold standard rework, or have one in progress, from the wiki's list.
 - **Price history:** past standard and warbond prices with dates, including the lowest and the last warbond.
 - **Upgrade costs:** pick a ship you own and see what upgrading to each other ship costs.

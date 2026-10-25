@@ -19,7 +19,7 @@ from .store import USER_AGENT
 log = logging.getLogger("pledgewatch")
 
 WIKI = "https://api.star-citizen.wiki/api/v2/vehicles?page%5Bsize%5D=50&page%5Bnumber%5D={}"
-ITEMS = "https://api.star-citizen.wiki/api/v2/items?filter%5Btype%5D={}&page%5Bsize%5D=500"
+ITEMS = "https://api.star-citizen.wiki/api/v2/items?filter%5Btype%5D={}&page%5Bsize%5D=200&page%5Bnumber%5D={}"
 UEX = "https://api.uexcorp.space/2.0/"
 REFRESH = 86400
 PAUSE = 1.5  # between wiki pages; each is ~3 MB
@@ -32,6 +32,17 @@ def _get(url):
         return json.load(r)
 
 
+def _items(kind):
+    """Every item of one type (pages of 200, the API's most)."""
+    out, page = [], 1
+    while True:
+        d = _get(ITEMS.format(kind, page))
+        out += d["data"]
+        if page >= d["meta"]["last_page"]:
+            return out
+        page += 1
+
+
 def refresh(db, now=None, force=False):
     now = int(now or time.time())
     last = db.execute("SELECT value FROM state WHERE key='ingame_at'").fetchone()
@@ -40,13 +51,18 @@ def refresh(db, now=None, force=False):
     try:
         # Ship guns and missile racks (~3 MB together): the vehicle list doesn't nest guns in their mounts or say
         # what a rack holds, so sizes and rack capacities come from here.
-        sizes = {g["name"]: g.get("size") for g in _get(ITEMS.format("WeaponGun"))["data"] if g.get("name")}
-        racks = {r["uuid"]: _rack(r) for r in _get(ITEMS.format("MissileLauncher"))["data"] if r.get("missile_rack")}
+        guns = [g for g in _items("WeaponGun") if g.get("name")]
+        sizes = {g["name"]: g.get("size") for g in guns}
+        classes = {g["class_name"]: (g["name"], g.get("size")) for g in guns if g.get("class_name")}
+        racks = {}  # by uuid (ship hardpoints) and class name (missile turrets name their rack's class)
+        for r in _items("MissileLauncher"):
+            if r.get("missile_rack"):
+                racks[r["uuid"]] = racks[r.get("class_name") or r["uuid"]] = _rack(r)
         wiki, page = [], 1
         while True:
             d = _get(WIKI.format(page))
             # Each vehicle has ~77 fields (~60 KB); keep the few we use so a refresh stays well inside the memory cap.
-            wiki += [{**{k: v.get(k) for k in KEEP}, "weapons": weapons(v, sizes, racks)} for v in d["data"]]
+            wiki += [{**{k: v.get(k) for k in KEEP}, "weapons": weapons(v, sizes, classes, racks)} for v in d["data"]]
             del d["data"]
             if page >= d["meta"]["last_page"]:
                 break
@@ -112,13 +128,16 @@ def _rack(r):
     return r["missile_rack"].get("missile_count") or 0, r["missile_rack"].get("missile_size"), kind
 
 
-def weapons(v, sizes, racks):
-    """Every gun on the ship's stock loadout, grouped by who fires it, plus its missiles:
-    {"guns": [[who, mount, how many mounts, [[count, size, gun]] per mount, DPS of the whole row]],
-     "pilotDps", "missiles": [[count, size, kind]], "missileCount"}.
-    who is pilot (their own guns, and turrets they can slave to their trigger), gunner (crewed and remote turrets) or
-    auto (point defence). An empty turret has no guns. The wiki's own pilot DPS isn't used: on some ships (Polaris) it
-    counts a crewed turret. None when the wiki has no weapon data for the ship."""
+def weapons(v, sizes, classes, racks):
+    """Every gun and missile turret on the ship's stock loadout, grouped by who fires it, plus its missiles:
+    {"guns": [[who, mount, how many mounts, [[count, size, gun]] per mount, DPS, sustained DPS, alpha]],
+     "pilot": [DPS, sustained, alpha], "missiles": [[count, size, kind]], "missileCount"}.
+    who is pilot (their own guns), pilot or gunner (turrets the pilot can slave to their trigger), gunner (crewed and
+    remote turrets) or auto (point defence). Damage figures are for the whole row: every mount, every gun firing.
+    A missile turret's guns are its missiles ([[8, 2, "missiles"]], or [[1, 4, "missile rack"]] when the wiki doesn't
+    list the rack) and its damage is 0, as is a gun the wiki names on a turret but has no figures for (Mauler's S9
+    beam). Tractor beams and turrets with nothing fitted are left out. The wiki's own pilot DPS isn't used: on some
+    ships (Polaris) it counts a crewed turret. None when the wiki has no weapon data."""
     w, t = v.get("weaponry"), v.get("turrets") or {}
     if not w:
         return None
@@ -131,32 +150,45 @@ def weapons(v, sizes, racks):
             out[(size, g.get("name") or "?")] = out.get((size, g.get("name") or "?"), 0) + 1
         return [[n, size, name] for (size, name), n in sorted(out.items(), key=lambda x: (-(x[0][0] or 0), x[0][1]))]
 
-    rows = {}
+    def damage(guns):
+        return [sum(g.get(k) or 0 for g in guns) for k in ("dps", "sustained_dps", "alpha")]
+
+    rows, missiles = {}, {}
     fixed = (w.get("fixed_weapons") or {}).get("weapons") or []
     if fixed:
-        rows[("pilot", "hardpoints", "")] = [1, kit(fixed), sum(g.get("dps") or 0 for g in fixed)]
+        rows[("pilot", "hardpoints", "")] = [1, kit(fixed), damage(fixed)]
     for mount in ("manned", "remote", "pdc"):
         for x in t.get(mount) or []:
             guns = x.get("weapons") or []
-            if not guns and not x.get("weapon_sizes"):
-                continue  # a camera or tractor mount, nothing to fire
-            who = "auto" if mount == "pdc" else "pilot" if x.get("is_pilot_slaveable") else "gunner"
-            each = kit(guns, x.get("weapon_sizes") or [])
+            who = "auto" if mount == "pdc" else "both" if x.get("is_pilot_slaveable") else "gunner"
+            each, kind = kit(guns, x.get("weapon_sizes") or []), mount
             if not guns:
-                each = [[len(x["weapon_sizes"]), max(x["weapon_sizes"]), ""]]  # empty mount
-            key = (who, mount, json.dumps(each))
-            row = rows.setdefault(key, [0, each, 0])
+                fitted = x.get("payload_class_names") or []
+                held = [racks[c] for c in fitted if c in racks]
+                named = [classes[c] for c in fitted if c in classes]
+                if held:  # a missile turret (890 Jump)
+                    each, kind = [[n, size, f"{k}s"] for n, size, k in held], mount + "-missile"
+                    for n, size, k in held:
+                        missiles[(size, k)] = missiles.get((size, k), 0) + n
+                elif any("MissileLauncher" in (p or "") for p in x.get("payload_types") or []):  # Polaris, Ballista
+                    each, kind = [[1, max(x.get("weapon_sizes") or [0]) or None, "missile rack"]], mount + "-missile"
+                elif named:
+                    each = [[len(x.get("weapon_sizes") or [1]), named[0][1], named[0][0]]]
+                else:
+                    continue  # a camera, a tractor beam or nothing fitted
+            row = rows.setdefault((who, kind, json.dumps(each)), [0, each, [0, 0, 0]])
             row[0] += 1
-            row[2] += x.get("dps_total") or sum(g.get("dps") or 0 for g in guns)
-    order = {"pilot": 0, "gunner": 1, "auto": 2}
-    guns = [[who, mount, n, each, round(dps)] for (who, mount, _), (n, each, dps) in rows.items()]
-    guns.sort(key=lambda r: (order[r[0]], r[1] != "hardpoints", -max((g[1] or 0) for g in r[3])))
-    missiles = {}
+            totals = [x.get("dps_total"), x.get("sustained_dps_total"), x.get("alpha_total")]
+            row[2] = [a + (b if b is not None else c) for a, b, c in zip(row[2], totals, damage(guns))]
+    order = {"pilot": 0, "both": 1, "gunner": 2, "auto": 3}
+    guns = [[who, mount, n, each, *map(round, dmg)] for (who, mount, _), (n, each, dmg) in rows.items()]
+    guns.sort(key=lambda r: (order[r[0]], "missile" in r[1], -max((g[1] or 0) for g in r[3])))
     for p in v.get("ports") or []:
         rack = racks.get(p.get("equipped_item_uuid")) if p.get("category_label") == "Missile & Bomb Racks" else None
         if rack and rack[0]:
             missiles[rack[1:]] = missiles.get(rack[1:], 0) + rack[0]
-    return {"guns": guns, "pilotDps": round(sum(r[4] for r in guns if r[0] == "pilot")),
+    pilot = [sum(r[i] for r in guns if r[0] in ("pilot", "both")) for i in (4, 5, 6)]
+    return {"guns": guns, "pilot": pilot,
             "missiles": [[n, size, kind] for (size, kind), n in sorted(missiles.items(), key=lambda x: -(x[0][0] or 0))],
             "missileCount": (w.get("missiles") or {}).get("count") or 0}
 

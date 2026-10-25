@@ -16,11 +16,15 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS watches (
+  platform TEXT NOT NULL, user_id TEXT NOT NULL, query TEXT NOT NULL, created INTEGER NOT NULL,
+  PRIMARY KEY (platform, user_id, query)
+);
 """
 
 
-def connect(path):
-    db = sqlite3.connect(path)
+def connect(path, check_same_thread=True):
+    db = sqlite3.connect(path, check_same_thread=check_same_thread)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.executescript(SCHEMA)

@@ -68,8 +68,8 @@ def ago(ts, now):
     return "earlier today"
 
 
-def message(e, ts, role=None):
-    """Build the message for one event."""
+def message(e, ts, role=None, users=()):
+    """Build the message for one event. `users` are people watching this ship, pinged by name."""
     label, colour, ping = KINDS[e["kind"]]
     if e["kind"] in ("store_down", "store_ok"):
         text = (f"The RSI store has failed {e.get('fails', 3)} checks in a row. Alerts are paused until it answers "
@@ -93,13 +93,14 @@ def message(e, ts, role=None):
         fields.append({"name": "Last seen", "value": ago(e["last_seen"], ts), "inline": True})
 
     embed = {"author": {"name": label}, "title": e["name"], "url": e["url"], "color": colour, "fields": fields,
-             "footer": {"text": "RSI pledge store · USD before tax"}, "timestamp": _iso(ts)}
+             "footer": {"text": "Public store: what anyone can buy, logged out · USD before tax"}, "timestamp": _iso(ts)}
     if e.get("image"):
         embed["thumbnail"] = {"url": e["image"]}
     msg = {"embeds": [embed], "allowed_mentions": {"parse": []}}
-    if ping and role:
-        msg["content"] = f"<@&{role}>"
-        msg["allowed_mentions"] = {"roles": [role]}
+    roles = [role] if ping and role else []
+    if roles or users:
+        msg["content"] = " ".join([f"<@&{r}>" for r in roles] + [f"<@{u}>" for u in users])
+        msg["allowed_mentions"] = {"roles": roles, "users": list(users)}
     return msg
 
 
@@ -109,6 +110,7 @@ def _iso(ts):
 
 def flush(db, apps, now=None):
     """Post every event that hasn't reached every app yet. Safe to call after each check."""
+    from .commands import watchers
     now = int(now or time.time())
     rows = db.execute("SELECT id, ts, data, posted FROM events WHERE ts >= ? ORDER BY id", (now - MAX_AGE,)).fetchall()
     for row in rows:
@@ -118,7 +120,7 @@ def flush(db, apps, now=None):
             if app.name in posted:
                 continue
             try:
-                posted[app.name] = app.send(message(e, row["ts"], app.role)).get("id", True)
+                posted[app.name] = app.send(message(e, row["ts"], app.role, watchers(db, app.name, e))).get("id", True)
             except (urllib.error.URLError, TimeoutError, ValueError) as err:
                 detail = err.read().decode(errors="replace")[:200] if isinstance(err, urllib.error.HTTPError) else ""
                 log.warning("couldn't post %s to %s: %s %s", e["kind"], app.name, err, detail)

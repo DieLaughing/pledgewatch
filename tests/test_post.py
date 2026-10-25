@@ -14,7 +14,7 @@ def test_money():
 
 def test_new_limited_pings_role():
     m = message(IDRIS, 1_700_000_000, role="42")
-    assert m["content"] == "<@&42>" and m["allowed_mentions"] == {"roles": ["42"]}
+    assert m["content"] == "<@&42>" and m["allowed_mentions"] == {"roles": ["42"], "users": []}
     e = m["embeds"][0]
     assert e["author"]["name"] == "New in store · Limited" and e["title"] == "Idris-P"
     assert e["thumbnail"]["url"] == "https://x/i.jpg"

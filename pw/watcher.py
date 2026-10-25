@@ -52,12 +52,21 @@ def _failed(db, reason, now):
     return []
 
 
-def run(path, apps):
-    db = store_db.connect(path)
+def tick(db, apps):
+    for e in check(db):
+        log.info("%s: %s", e["kind"], e.get("name", e.get("reason", "")))
+    flush(db, apps)
+
+
+async def run(path, apps):
+    """Check the store every INTERVAL seconds. The blocking work runs in a thread so the bots stay responsive."""
+    import asyncio
+    db = store_db.connect(path, check_same_thread=False)  # only ever used by one tick at a time
     log.info("watching the RSI store every %ds, posting to %s", INTERVAL, ", ".join(a.name for a in apps) or "nowhere")
     while True:
         started = time.monotonic()
-        for e in check(db):
-            log.info("%s: %s", e["kind"], e.get("name", e.get("reason", "")))
-        flush(db, apps)
-        time.sleep(max(30, INTERVAL - (time.monotonic() - started)))
+        try:
+            await asyncio.to_thread(tick, db, apps)
+        except Exception:
+            log.exception("check crashed")
+        await asyncio.sleep(max(30, INTERVAL - (time.monotonic() - started)))

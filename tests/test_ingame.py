@@ -32,12 +32,24 @@ def test_rows_merge_variants_and_join_uex_by_uuid_or_name():
     assert '"Nowhere"' in polaris[7]  # UEX had no UUID for it, matched by name
 
 
-def test_weapons_count_pilot_guns_and_slaveable_turrets_only():
+def test_weapons_list_every_gun_by_who_fires_it():
     gun = lambda name, dps: {"name": name, "dps": dps}
+    turret = lambda slave, guns, sizes, dps: {"is_pilot_slaveable": slave, "weapons": guns, "weapon_sizes": sizes,
+                                              "dps_total": dps}
     v = {"weaponry": {"fixed_weapons": {"weapons": [gun("C-788 Cannon", 800), gun("C-788 Cannon", 800)]},
                       "missiles": {"count": 16}},
-         "turrets": {"manned": [{"is_pilot_slaveable": False, "weapons": [gun("AD4B", 1266)] * 2}],
-                     "remote": [{"is_pilot_slaveable": True, "weapons": [gun("M5A Cannon", 680)] * 2}], "pdc": []}}
-    assert weapons(v) == {"pilot": [[2, None, "C-788 Cannon", False], [2, None, "M5A Cannon", True]], "pilotDps": 2960,
-                          "manned": 1, "remote": 1, "slaved": 1, "turretGuns": 2, "missiles": 16}
-    assert weapons({"weaponry": None}) is None
+         "turrets": {"manned": [turret(False, [gun("AD4B", 1266)] * 2, [4, 4], 2532)] * 2,
+                     "remote": [turret(True, [gun("M5A Cannon", 680)] * 2, [3, 3], 1360), turret(False, [], [4], 0),
+                                turret(False, [], [], 0)],
+                     "pdc": [turret(False, [gun("Swarm", 160)], [1], 160)]},
+         "ports": [{"category_label": "Missile & Bomb Racks", "equipped_item_uuid": "r1"}] * 2}
+    sizes = {"C-788 Cannon": 4, "AD4B": 4}  # M5A missing from the gun list: the turret's mount size is used
+    racks = {"r1": (8, 2, "missile")}
+    assert weapons(v, sizes, racks) == {
+        "guns": [["pilot", "hardpoints", 1, [[2, 4, "C-788 Cannon"]], 1600],
+                 ["pilot", "remote", 1, [[2, 3, "M5A Cannon"]], 1360],
+                 ["gunner", "manned", 2, [[2, 4, "AD4B"]], 5064],
+                 ["gunner", "remote", 1, [[1, 4, ""]], 0],
+                 ["auto", "pdc", 1, [[1, 1, "Swarm"]], 160]],
+        "pilotDps": 2960, "missiles": [[16, 2, "missile"]], "missileCount": 16}
+    assert weapons({"weaponry": None}, sizes, racks) is None

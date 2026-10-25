@@ -105,7 +105,9 @@ button, input, select { font: inherit; color: inherit; }
 .arms { margin: 4px 0 0; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .gold-note { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
 .gold-note.done { color: var(--wb); }
-.guns { list-style: none; margin: 0; padding: 0; }
+.arms-table td { vertical-align: top; }
+.arms-table .small-inline { font-size: 12px; }
+.arms-facts { margin-top: 12px; }
 
 .grid-toggle { margin-top: 6px; }
 .details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }

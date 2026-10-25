@@ -322,16 +322,21 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
   );
 }
 
-// "Pilot: 2× S4, 4× S3 (2 turrets) · 2 crewed turrets": what one person flying alone can shoot, then what needs crew.
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const MOUNT = { hardpoints: "Guns", manned: "crewed turret", remote: "remote turret", pdc: "point-defence turret" };
+const WHO = { pilot: "Pilot", gunner: "Gunners", auto: "Automatic" };
+const MISSILE = { missile: "missile", torpedo: "torpedo", bomb: "bomb" };
+
+// Card summary, e.g. "Pilot: 2× S4 + 2 turrets · Gunners: 2 turrets · 7 PDCs".
 function armsLine(w) {
-  const bySize = {};
-  for (const [n, size] of w.pilot) bySize[size ?? "?"] = (bySize[size ?? "?"] || 0) + n;
-  const guns = Object.entries(bySize).sort((a, b) => b[0] - a[0]).map(([size, n]) => `${n}× S${size}`).join(", ");
-  const parts = [guns ? `Pilot: ${guns}${w.slaved ? ` (incl. ${w.slaved} turret${w.slaved === 1 ? "" : "s"})` : ""}` : "Pilot: no guns"];
-  if (w.manned) parts.push(`${w.manned} crewed turret${w.manned === 1 ? "" : "s"}`);
-  const remote = w.remote - w.slaved;
-  if (remote > 0) parts.push(`${remote} remote turret${remote === 1 ? "" : "s"}`);
-  return parts.join(" · ");
+  const own = w.guns.find((r) => r[0] === "pilot" && r[1] === "hardpoints");
+  const sizes = {};
+  for (const [n, size] of own ? own[3] : []) sizes[size] = (sizes[size] || 0) + n;
+  const guns = Object.entries(sizes).sort((a, b) => b[0] - a[0]).map(([size, n]) => `${n}× S${size}`).join(", ");
+  const turrets = (who, mounts) => w.guns.filter((r) => r[0] === who && mounts.includes(r[1])).reduce((a, r) => a + r[2], 0);
+  const pt = turrets("pilot", ["manned", "remote"]), gt = turrets("gunner", ["manned", "remote"]), pdc = turrets("auto", ["pdc"]);
+  const pilot = [guns, pt && plural(pt, "turret")].filter(Boolean).join(" + ");
+  return [`Pilot: ${pilot || "no guns"}`, gt && `Gunners: ${plural(gt, "turret")}`, pdc && plural(pdc, "PDC")].filter(Boolean).join(" · ");
 }
 
 function goldText(s) {
@@ -406,18 +411,37 @@ function Details({ s, rate, version }) {
       {w ? (
         <section class="wide">
           <h3>Weapons</h3>
-          <dl class="facts">
-            <dt>Pilot</dt>
-            <dd>
-              {w.pilot.length ? (
-                <ul class="guns">
-                  {w.pilot.map(([n, size, name, turret]) => <li><b>{n}×</b> {size ? `S${size} ` : ""}{name}{turret ? <span class="muted"> in a turret the pilot can fire</span> : null}</li>)}
-                </ul>
-              ) : <span class="muted">None: every turret needs a gunner</span>}
-            </dd>
-            {w.pilotDps ? <><dt>Pilot damage</dt><dd><b>{w.pilotDps.toLocaleString("en-US")}</b> a second with the stock guns</dd></> : null}
-            {w.manned || w.remote ? <><dt>Turrets</dt><dd>{[w.manned && `${w.manned} crewed`, w.remote && `${w.remote} remote`].filter(Boolean).join(", ")}{w.slaved ? `, ${w.slaved} of them the pilot can fire` : ""}{w.turretGuns ? ` · ${w.turretGuns} guns for gunners` : ""}</dd></> : null}
-            {w.missiles ? <><dt>Missiles</dt><dd>{w.missiles}</dd></> : null}
+          {w.guns.length ? (
+            <div class="table-wrap">
+              <table class="hist arms-table">
+                <thead><tr><th>Fired by</th><th>Mount</th><th>Guns</th><th class="num">DPS</th></tr></thead>
+                <tbody>
+                  {w.guns.map(([who, mount, n, each, dps]) => (
+                    <tr>
+                      <td>{who === "pilot" && mount !== "hardpoints" ? "Pilot or gunner" : WHO[who]}</td>
+                      <td>{mount === "hardpoints" ? MOUNT[mount] : plural(n, MOUNT[mount])}</td>
+                      <td>
+                        {each.map(([c, size, name]) => (
+                          <div>{name ? <><b>{c}×</b> S{size} {name}</> : <span class="muted">Empty S{size} mount</span>}</div>
+                        ))}
+                        {n > 1 && mount !== "hardpoints" ? <div class="muted small-inline">on each turret</div> : null}
+                      </td>
+                      <td class="num">{dps ? dps.toLocaleString("en-US") : "–"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p class="muted">No guns.</p>}
+          <dl class="facts arms-facts">
+            <dt>Pilot alone</dt>
+            <dd>{w.pilotDps ? <><b>{w.pilotDps.toLocaleString("en-US")}</b> damage a second</> : <span class="muted">no guns: the turrets need gunners</span>}</dd>
+            {w.guns.some((r) => r[0] !== "pilot" && r[4]) ? <><dt>Fully crewed</dt><dd><b>{w.guns.reduce((a, r) => a + r[4], 0).toLocaleString("en-US")}</b> damage a second</dd></> : null}
+            {w.missiles.length || w.missileCount ? (
+              <><dt>Missiles</dt><dd>{w.missiles.length
+                ? w.missiles.map(([n, size, kind]) => `${n}× S${size} ${MISSILE[kind]}${n === 1 ? "" : kind === "torpedo" ? "es" : "s"}`).join(", ")
+                : plural(w.missileCount, "missile")}</dd></>
+            ) : null}
           </dl>
           <p class="muted small">Stock loadout{version ? ` in game version ${version}` : ""}, from the Star Citizen Wiki.</p>
         </section>

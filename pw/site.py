@@ -17,7 +17,7 @@ import urllib.request
 from aiohttp import web
 
 from . import cargo as cargo_grids
-from . import release
+from . import release, whatsnew
 from .catalog import STATUS, info, match_key
 from .commands import norm
 from .store import USER_AGENT
@@ -126,7 +126,7 @@ def build(db, now=None):
                         "was": d.get("was"), "now": d.get("now"), "limited": d.get("limited"), "url": d.get("url")})
     first = db.execute("SELECT MIN(first_seen) FROM ships").fetchone()[0]
     last_ok = db.execute("SELECT value FROM state WHERE key='last_ok'").fetchone()
-    return {"ships": out, "changes": changes, "gameVersion": version, "trackingSince": first, "checkedAt": json.loads(last_ok[0]) if last_ok
+    return {"ships": out, "changes": changes, "newest": whatsnew.NEWEST, "gameVersion": version, "trackingSince": first, "checkedAt": json.loads(last_ok[0]) if last_ok
             else None, "builtAt": now}
 
 
@@ -338,6 +338,9 @@ class Site:
     async def privacy(self, request):
         return web.Response(text=PRIVACY, content_type="text/html", headers={"Cache-Control": "public, max-age=3600"})
 
+    async def whats_new(self, request):
+        return web.Response(text=whatsnew.page(), content_type="text/html", headers={"Cache-Control": "public, max-age=600"})
+
     async def terms(self, request):
         return web.Response(text=TERMS, content_type="text/html", headers={"Cache-Control": "public, max-age=3600"})
 
@@ -353,6 +356,7 @@ class Site:
         app.router.add_get("/healthz", self.health)
         app.router.add_get("/privacy", self.privacy)
         app.router.add_get("/terms", self.terms)
+        app.router.add_get("/whats-new", self.whats_new)
         for name in ("favicon.svg", "favicon.ico", "apple-touch-icon.png"):
             app.router.add_get(f"/{name}", self._file(name))
         app.router.add_static("/assets", os.path.join(self.dist, "assets"), append_version=False)

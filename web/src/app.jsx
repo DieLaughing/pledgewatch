@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 const FILTERS = [
-  ["warbond", "Warbond", (s) => s.editions.some((e) => e.inStore && e.label === "Warbond")],
-  ["anniversary", "10 Year", (s) => s.editions.some((e) => e.inStore && e.label === "10 Year")],
-  ["lti", "Lifetime insurance", (s) => s.editions.some((e) => e.inStore && e.insurance === "Lifetime")],
-  ["buyable", "Buy in game", (s) => !!s.buy],
-  ["rentable", "Rent in game", (s) => !!s.rent],
-  ["sale", "Discounted", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice)],
-  ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited)],
-  ["gold", "Gold standard", (s) => s.gold?.status === "done"],
-  ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
+  ["warbond", "Warbond", (s) => s.editions.some((e) => e.inStore && e.label === "Warbond"), "editions"],
+  ["anniversary", "10 Year", (s) => s.editions.some((e) => e.inStore && e.label === "10 Year"), "editions"],
+  ["lti", "Lifetime insurance", (s) => s.editions.some((e) => e.inStore && e.insurance === "Lifetime"), "editions"],
+  ["buyable", "Buy in game", (s) => !!s.buy, "game"],
+  ["rentable", "Rent in game", (s) => !!s.rent, "game"],
+  ["sale", "Discounted", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice), "editions"],
+  ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited), "editions"],
+  ["gold", "Gold standard", (s) => s.gold?.status === "done", "ship"],
+  ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready", "ship"],
   // Upgrade (CCU) store. With a ship picked under "Upgrade from", only upgrades that ship can actually take count.
-  ["deals", "Upgrade deals", (s, x) => ups(s, x).some((u) => s.ccu && u.price < s.ccu.value)],
-  ["ccu", "Upgradable", (s, x) => ups(s, x).length > 0],
+  ["deals", "Upgrade deals", (s, x) => ups(s, x).some((u) => s.ccu && u.price < s.ccu.value), "upgrades"],
+  ["ccu", "Upgradable", (s, x) => ups(s, x).length > 0, "upgrades"],
 ];
+const GROUPS = [["editions", "Editions"], ["upgrades", "Upgrades"], ["game", "In game"], ["ship", "Ship"]];
 // Upgrade filters also look at ships you can only get by upgrading right now, not as a standalone ship.
 const UPGRADE_FILTERS = ["deals", "ccu"];
 const ups = (s, x) => (s.upgrades || []).filter((u) => !x?.costs || (x.from !== s.key && u.sku in x.costs));
@@ -39,6 +40,7 @@ const SORTS = {
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
 const RATE_KEY = "pw-rate";
+const SEEN_KEY = "pw-seen";  // newest What's new date this browser has opened
 function savedRate() {
   try { return Number(localStorage.getItem(RATE_KEY)) || 500000; } catch { return 500000; }
 }
@@ -164,8 +166,18 @@ export function App({ data: first }) {
   const fromPrice = (upgradable.find(([k]) => k === st.from) || [])[2] || 0;
 
   const toggle = (k) => set({ f: st.f.includes(k) ? st.f.filter((x) => x !== k) : [...st.f, k] });
-  const clear = () => set({ q: "", f: [], maker: "", size: "" });
-  const filtered = st.q || st.f.length || st.maker || st.size;
+  const clear = () => set({ q: "", f: [], maker: "", size: "", from: "" });
+  const filtered = st.q || st.f.length || st.maker || st.size || st.from;
+  // Filters live in a panel (a sheet from the bottom on phones). What's on shows as chips you can tap to remove.
+  const sheet = useRef(null);
+  const on = [
+    ...(st.from && fromShip ? [[`From ${fromShip.name}`, () => set({ from: "" })]] : []),
+    ...FILTERS.filter(([k]) => st.f.includes(k)).map(([k, label]) => [label, () => toggle(k)]),
+    ...(st.maker ? [[st.maker, () => set({ maker: "" })]] : []),
+    ...(st.size ? [[st.size, () => set({ size: "" })]] : []),
+  ];
+  const [seen, setSeen] = useState(() => { try { return localStorage.getItem(SEEN_KEY) || ""; } catch { return ""; } });
+  const markSeen = () => { try { localStorage.setItem(SEEN_KEY, data.newest); } catch {} setSeen(data.newest); };
 
   return (
     <div class="page">
@@ -177,6 +189,9 @@ export function App({ data: first }) {
         <p class="checked">
           <span class="dot" aria-hidden="true" />
           Public RSI store{data.checkedAt ? `, checked ${ago(data.checkedAt, now)}` : ""}
+          <a class="news" href="/whats-new" onClick={markSeen}>
+            What's new{data.newest && seen < data.newest ? <span class="nd" aria-label="(new)" /> : null}
+          </a>
         </p>
       </header>
 
@@ -213,45 +228,83 @@ export function App({ data: first }) {
       ) : (
         <>
           <div class="controls">
-            <input id="q" type="search" placeholder="Search ships, makers, roles" value={st.q} aria-label="Search ships"
-              onInput={(e) => set({ q: e.currentTarget.value })} />
-            <div class="chips" role="group" aria-label="Show only">
-              {FILTERS.map(([k, label]) => (
-                <button type="button" class="chip" aria-pressed={st.f.includes(k)} onClick={() => toggle(k)}>
-                  {label}{st.view === "store" ? <span class="n">{counts[k]}</span> : null}
-                </button>
-              ))}
+            <div class="bar">
+              <input id="q" type="search" placeholder="Search ships, makers, roles" value={st.q} aria-label="Search ships"
+                onInput={(e) => set({ q: e.currentTarget.value })} />
+              <button type="button" class="fbtn" aria-haspopup="dialog" onClick={() => sheet.current?.showModal()}>
+                Filters{on.length ? <span class="badge">{on.length}</span> : null}
+              </button>
             </div>
-            <div class="selects">
-              <select id="maker" aria-label="Maker" value={st.maker} onChange={(e) => set({ maker: e.currentTarget.value })}>
-                <option value="">All makers</option>
-                {makers.map((m) => <option value={m}>{m}</option>)}
-              </select>
-              <select id="size" aria-label="Size" value={st.size} onChange={(e) => set({ size: e.currentTarget.value })}>
-                <option value="">All sizes</option>
-                {SIZES.map((s) => <option value={s}>{s}</option>)}
-              </select>
+            {on.length ? (
+              <div class="on" aria-label="Filters on">
+                {on.map(([label, off]) => <button type="button" class="chip" aria-pressed="true" onClick={off} aria-label={`Remove ${label}`}>{label} <span aria-hidden="true">✕</span></button>)}
+              </div>
+            ) : null}
+            <div class="count">
+              <span>{shown.length} {shown.length === 1 ? "ship" : "ships"}</span>
+              {filtered ? <button type="button" class="link" onClick={clear}>Clear</button> : null}
               <select id="sort" aria-label="Sort" value={st.sort} onChange={(e) => set({ sort: e.currentTarget.value })}>
                 {Object.entries(SORTS).map(([k, [label]]) => <option value={k}>{label}</option>)}
               </select>
-              <select id="from" aria-label="Upgrade from a ship you own" value={st.from} onChange={(e) => set({ from: e.currentTarget.value })}>
-                <option value="">Upgrade from…</option>
-                {upgradable.map(([k, name, p, d]) => (
-                  <option value={k}>{d ? `${name} ($${(p / 100).toLocaleString("en-US")}, last seen ${new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })})` : `${name} (${money(p)})`}</option>
-                ))}
-              </select>
-              <label class="rate" for="rate">
-                I earn
-                <input id="rate" inputMode="numeric" value={rate.toLocaleString("en-US")} onChange={(e) => changeRate(e.currentTarget.value)} />
-                aUEC an hour
-              </label>
             </div>
           </div>
 
-          <p class="count">
-            {shown.length} {shown.length === 1 ? "ship" : "ships"}
-            {filtered ? <button type="button" class="link" onClick={clear}>Clear filters</button> : null}
-          </p>
+          <dialog ref={sheet} class="sheet" aria-label="Filters" onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}>
+            <div class="sheet-in">
+              <div class="sheet-head">
+                <h2>Filters</h2>
+                <button type="button" class="link" onClick={() => sheet.current?.close()}>Done</button>
+              </div>
+              {GROUPS.map(([g, title]) => (
+                <section>
+                  <h3>{title}</h3>
+                  {g === "upgrades" ? (
+                    <label class="field">
+                      I own
+                      <select id="from" value={st.from} onChange={(e) => set({ from: e.currentTarget.value })}>
+                        <option value="">Pick a ship to see upgrade costs</option>
+                        {upgradable.map(([k, name, p, d]) => (
+                          <option value={k}>{d ? `${name} ($${(p / 100).toLocaleString("en-US")}, last seen ${new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })})` : `${name} (${money(p)})`}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <div class="chips" role="group" aria-label={title}>
+                    {FILTERS.filter((f) => f[3] === g).map(([k, label]) => (
+                      <button type="button" class="chip" aria-pressed={st.f.includes(k)} onClick={() => toggle(k)}>
+                        {label}{st.view === "store" ? <span class="n">{counts[k]}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                  {g === "game" ? (
+                    <label class="field rate" for="rate">
+                      I earn
+                      <input id="rate" inputMode="numeric" value={rate.toLocaleString("en-US")} onChange={(e) => changeRate(e.currentTarget.value)} />
+                      aUEC an hour
+                    </label>
+                  ) : null}
+                  {g === "ship" ? (
+                    <div class="selects">
+                      <select id="maker" aria-label="Maker" value={st.maker} onChange={(e) => set({ maker: e.currentTarget.value })}>
+                        <option value="">All makers</option>
+                        {makers.map((m) => <option value={m}>{m}</option>)}
+                      </select>
+                      <select id="size" aria-label="Size" value={st.size} onChange={(e) => set({ size: e.currentTarget.value })}>
+                        <option value="">All sizes</option>
+                        {SIZES.map((x) => <option value={x}>{x}</option>)}
+                      </select>
+                    </div>
+                  ) : null}
+                </section>
+              ))}
+              <div class="sheet-foot">
+                {filtered ? <button type="button" class="link" onClick={clear}>Clear all</button> : <span />}
+                <button type="button" class="show" onClick={() => sheet.current?.close()}>
+                  Show {shown.length} {shown.length === 1 ? "ship" : "ships"}
+                </button>
+              </div>
+            </div>
+          </dialog>
 
           {shown.length ? (
             <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromName={fromShip?.name} fromPrice={fromPrice} ctx={ctx} version={data.gameVersion} />)}</ul>

@@ -44,3 +44,11 @@ def test_ship_id_beats_name_and_insurance_flows_through(tmp_path):
     e = ship["editions"][0]
     assert (e["label"], e["insurance"], e["paints"], e["includes"]) == ("Warbond", "Lifetime", 1,
                                                                          ["Skylark - Convergence Paint"])
+
+
+def test_whats_new_page_and_newest():
+    from pw import whatsnew
+    dates = [d for d, _ in whatsnew.ENTRIES]
+    assert dates == sorted(dates, reverse=True) and whatsnew.NEWEST == dates[0]
+    page = whatsnew.page()
+    assert "<code>/watch above:520</code>" in page and "October 26, 2026" in page

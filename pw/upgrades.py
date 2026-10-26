@@ -17,7 +17,7 @@ from .store import BASE, STORE_PAGE, StoreError, _opener
 log = logging.getLogger("pledgewatch")
 
 API = BASE + "/pledge-store/api/upgrade/graphql"
-PAGE = BASE + "/en/pledge/ship-upgrade-ccu"  # RSI's upgrade tool, where upgrades are bought (logged in)
+PAGE = BASE + "/en/account/pledges"  # My Hangar: RSI's Ship Upgrade tool opens from here (logged in)
 # If a check finds far fewer upgrade editions than we have listed, treat it as a bad read.
 MIN_SHARE = 0.5
 

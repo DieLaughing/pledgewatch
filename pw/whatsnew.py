@@ -14,6 +14,8 @@ ENTRIES = [
         "Bot: `/watch above:520` pings you when any ship or upgrade worth more than $520 comes in or gets cheaper, and "
         "`/watch from:<ship>` pings you about upgrades a ship you own can take, with the cost from it. "
         "On Fluxer: `!watch above:520`, `!watch from:M2`.",
+        "Clearer upgrades: each card shows the ship's upgrade value with a ? that explains it, a \"What would I pay?\" "
+        "shortcut, and a link to your RSI hangar, where upgrades are actually bought.",
         "This What's new page.",
     ]),
     ("2026-10-25", [

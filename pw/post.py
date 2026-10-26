@@ -171,7 +171,7 @@ def _upgrade_message(e, ts, label, colour, users, froms):
                        "inline": False})
     note = "Warbond: new money only, no store credit · " if warbond else ""
     embed = {"author": {"name": label}, "title": e["name"], "url": e["url"], "color": colour, "fields": fields,
-             "footer": {"text": note + "You pay the upgrade value minus your ship's · Bought in RSI's upgrade tool · USD"},
+             "footer": {"text": note + "You pay the upgrade value minus your ship's · Buy from your RSI hangar (Ship Upgrade) · USD"},
              "timestamp": _iso(ts)}
     if e.get("image"):
         embed["thumbnail"] = {"url": e["image"]}

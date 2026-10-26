@@ -124,15 +124,26 @@ export function App({ data: first }) {
   // Picking a ship under "Upgrade from" asks the server what it can upgrade into right now (RSI's upgrade tool).
   const fromShip = ships.find((s) => s.key === st.from);
   const ref = fromShip?.ccu?.ref;
-  const [costs, setCosts] = useState({ ref: null, map: null });
+  // Tries a few times before giving up, and says so: rough estimates are only shown, marked ≈, when RSI can't be reached.
+  const [costs, setCosts] = useState({ ref: null, map: null, state: "" });
+  const [tries, setTries] = useState(0);
   useEffect(() => {
     if (!ref) return;
     let live = true;
-    fetch(`/upgrades/${ref}.json`).then((r) => (r.ok ? r.json() : null))
-      .then((d) => live && d && setCosts({ ref, map: d.costs })).catch(() => {});
+    setCosts({ ref, map: null, state: "loading" });
+    const get = (n) => fetch(`/upgrades/${ref}.json`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => live && setCosts({ ref, map: d.costs, state: "ok" }))
+      .catch(() => {
+        if (!live) return;
+        if (n < 2) setTimeout(() => live && get(n + 1), 1500 * (n + 1));
+        else setCosts({ ref, map: null, state: "error" });
+      });
+    get(0);
     return () => { live = false; };
-  }, [ref]);
-  const ctx = useMemo(() => ({ from: st.from, costs: ref && costs.ref === ref ? costs.map : null }), [st.from, ref, costs]);
+  }, [ref, tries]);
+  const lookup = ref && costs.ref === ref ? costs.state : "";
+  const ctx = useMemo(() => ({ from: st.from, costs: lookup === "ok" ? costs.map : null, estimate: !ref || lookup === "error" }),
+    [st.from, ref, costs, lookup]);
 
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(([k, , fn]) =>
     [k, (UPGRADE_FILTERS.includes(k) ? sellable : inStore).filter((s) => fn(s, ctx)).length])), [inStore, sellable, ctx]);
@@ -242,6 +253,13 @@ export function App({ data: first }) {
                 {on.map(([label, off]) => <button type="button" class="chip" aria-pressed="true" onClick={off} aria-label={`Remove ${label}`}>{label} <span aria-hidden="true">✕</span></button>)}
               </div>
             ) : null}
+            {lookup === "loading" ? <p class="lookup">Asking RSI what your {fromShip.name} can upgrade into…</p> : null}
+            {lookup === "error" ? (
+              <p class="lookup bad">
+                Couldn't reach RSI's upgrade tool, so upgrade costs below are rough estimates (≈).{" "}
+                <button type="button" class="link" onClick={() => setTries((t) => t + 1)}>Try again</button>
+              </p>
+            ) : null}
             <div class="count">
               <span>{shown.length} {shown.length === 1 ? "ship" : "ships"}</span>
               {filtered ? <button type="button" class="link" onClick={clear}>Clear</button> : null}
@@ -347,7 +365,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
     .filter(Boolean).join(" · ");
   const notFlyable = s.status && s.status !== "Flight ready";
   // A rough upgrade cost (target's standard price minus yours) only until RSI's real answer is in.
-  const upgrade = !ctx.costs && from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
+  const upgrade = ctx.estimate && from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
   const buy = low(s.buy), rent = low(s.rent);
   return (
     <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
@@ -683,7 +701,7 @@ function Edition({ e, standard, upgrade }) {
       {e.insurance ? <span class={`ins${e.insurance === "Lifetime" ? " lti" : ""}`}>{e.insurance === "Lifetime" ? "Lifetime insurance" : `${e.insurance} insurance`}</span> : null}
       {e.paints ? <span class="extra" title={e.includes.join(", ")}>+ {e.paints} paint{e.paints === 1 ? "" : "s"}</span> : null}
       {saving ? <span class="save">save {money(saving)}</span> : null}
-      {upgrade ? <span class="up">upgrade +{money(upgrade)}</span> : null}
+      {upgrade ? <span class="up" title="Rough estimate: RSI's real upgrade cost couldn't be checked">≈ upgrade +{money(upgrade)}</span> : null}
       {state ? <span class="state">{state}</span> : null}
     </a>
   );

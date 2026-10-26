@@ -158,6 +158,7 @@ def _img_id(url):
 
 COSTS_TTL = 600  # seconds an answer from RSI's upgrade tool is reused
 SESSION_TTL = 1200  # RSI's guest upgrade session lasts 30 minutes
+COSTS_TIMEOUT = 10  # seconds per RSI request, so one slow answer can't hold up everyone's lookups for long
 
 # View channels, send messages, embed links, read history, mention roles (so role pings work even when the role
 # isn't set to mentionable).
@@ -331,7 +332,7 @@ class Site:
     def _fetch_costs(self, ref):
         from .upgrades import Session
         if not self.upgrade_session or time.time() - self.upgrade_session[0] > SESSION_TTL:
-            self.upgrade_session = (time.time(), Session())
+            self.upgrade_session = (time.time(), Session(timeout=COSTS_TIMEOUT))
         return self.upgrade_session[1].costs(ref)
 
     async def privacy(self, request):

@@ -77,6 +77,8 @@ button, input, select { font: inherit; color: inherit; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 14px; color: var(--muted); cursor: pointer; }
 .chip .n { font: 12px var(--mono); opacity: .8; }
 .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.lookup { margin: 0; font-size: 13px; color: var(--muted); }
+.lookup.bad { color: var(--warn); }
 .count { margin: 0; color: var(--muted); font-size: 13px; display: flex; gap: 12px; align-items: center; }
 #sort { margin-left: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 13px; max-width: 60%; }
 .news { margin-left: 10px; color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }

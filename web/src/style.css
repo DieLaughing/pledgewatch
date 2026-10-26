@@ -190,6 +190,9 @@ html:has(.sheet[open]) { overflow: hidden; }
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 14px; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; min-width: 0; }
+.facts .places { grid-column: 1 / -1; }
+.places ul { list-style: none; margin: 0; padding: 10px 0 0; border-top: 1px solid var(--line); display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.places b { color: var(--fg); font-weight: 600; }
 .where { list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); font-size: 13px; display: grid; gap: 2px; }
 .where li { display: flex; justify-content: space-between; gap: 10px; }
 .where span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; }

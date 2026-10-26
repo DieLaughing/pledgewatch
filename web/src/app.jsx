@@ -486,12 +486,12 @@ function Details({ s, rate, version }) {
             <dt>Buy</dt><dd><b>{auec(buy)}</b> at {s.buy.find((x) => x[0] === buy)[1]}</dd>
             <dt>Your time</dt><dd>about <b>{hours(buy / rate)}</b> at {auec(rate)} an hour</dd>
             {dollars ? <><dt>Value</dt><dd>{Math.round(buy / dollars).toLocaleString("en-US")} aUEC per pledge dollar (${dollars.toLocaleString("en-US")})</dd></> : null}
-            {rent ? <><dt>Rent</dt><dd><b>{auec(rent)}</b> a day at {s.rent.find((x) => x[0] === rent)[1]}{s.rent.length > 1 ? `, ${s.rent.length} places` : ""}</dd></> : null}
+            {rent ? <Rent list={s.rent} /> : null}
           </dl>
         ) : rent ? (
           <dl class="facts">
             <dt>Buy</dt><dd class="muted">Not sold in game right now</dd>
-            <dt>Rent</dt><dd><b>{auec(rent)}</b> a day at {s.rent.find((x) => x[0] === rent)[1]}{s.rent.length > 1 ? `, ${s.rent.length} places` : ""}</dd>
+            <Rent list={s.rent} />
           </dl>
         ) : (
           <p class="muted">Not sold or rented in game right now. New ships usually reach the pledge store long before they're sold in game.</p>
@@ -570,6 +570,33 @@ function Details({ s, rate, version }) {
         {s.grid ? <a href={s.grid.viewer} target="_blank" rel="noopener">3D cargo</a> : null}
       </p>
     </div>
+  );
+}
+
+// The cheapest place to rent, with every other place one tap away: some ships rent at 30 places, too many to show.
+// Opened, places are grouped by price (most charge the same), so the list stays a few lines even on a phone.
+function Rent({ list }) {
+  const [open, setOpen] = useState(false);
+  const best = low(list);
+  const byPrice = {};  // by the price as shown: a few aUEC apart reads as the same price
+  for (const [p, t] of [...list].sort((a, b) => a[0] - b[0])) (byPrice[auec(p)] ||= []).push(t);
+  return (
+    <>
+      <dt>Rent</dt>
+      <dd>
+        <b>{auec(best)}</b> a day at {list.find((x) => x[0] === best)[1]}
+        {list.length > 1 ? <>{" · "}<button type="button" class="link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "hide places" : `all ${list.length} places`}</button></> : null}
+      </dd>
+      {open ? (
+        <dd class="places">
+          <ul>
+            {Object.entries(byPrice).map(([p, places]) => (
+              <li><b>{p}</b>{places.length > 1 ? ` at ${places.length} places` : ""}: {places.sort().join(", ")}</li>
+            ))}
+          </ul>
+        </dd>
+      ) : null}
+    </>
   );
 }
 

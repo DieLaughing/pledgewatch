@@ -128,7 +128,8 @@ html:has(.sheet[open]) { overflow: hidden; }
 .ship > img, .ship > .noimg { grid-column: 1; grid-row: 1; }
 .ship > .info { grid-column: 2; grid-row: 1; }
 .ship > .buy { grid-column: 3; grid-row: 1; }
-.ship > .details { grid-row: 2; }
+.ship > .ccu { grid-column: 2 / -1; grid-row: 2; }
+.ship > .details { grid-row: 3; }
 .specs { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .status { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .tag { font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
@@ -227,7 +228,7 @@ html:has(.sheet[open]) { overflow: hidden; }
 .ed-10year .label { color: var(--ten); }
 .ed .state { color: var(--warn); }
 .ed.soldout { opacity: .6; }
-.ccu { flex: 1 0 100%; margin: 2px 0 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 12px; font-size: 13px; color: var(--muted); }
+.ccu { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 12px; font-size: 13px; color: var(--muted); }
 .ccu .k { font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; align-self: center; }
 .ccu b { color: var(--fg); font: 600 13px var(--mono); font-variant-numeric: tabular-nums; }
 .ccu .deal, .ccu .deal b { color: var(--wb); }
@@ -247,7 +248,7 @@ html:has(.sheet[open]) { overflow: hidden; }
   .info > .arms, .info > .status { grid-column: 1 / -1; margin: 0; }
   .ship > .buy { grid-column: 1 / -1; grid-row: auto; justify-content: stretch; }
   .ship > .buy .ed { flex: 1 1 0; min-width: 0; }
-  .ccu { justify-content: flex-start; }
+  .ship > .ccu { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
   .info > .grid-toggle { grid-column: 1 / -1; justify-self: start; order: 1; margin: 0; }
   .ship > .details { grid-row: auto; order: 2; }
   .notin { text-align: left; flex-basis: 100%; }

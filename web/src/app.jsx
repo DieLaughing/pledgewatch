@@ -387,7 +387,6 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, version }) {
             <span class="ins">per day</span>
           </div>
         ) : null}
-        <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} />
         {!s.inStore && !s.upgrades ? (
           <p class="notin">
             Not in the store
@@ -395,6 +394,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, version }) {
           </p>
         ) : null}
       </div>
+      <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} />
       {open ? <Details s={s} rate={rate} version={version} /> : null}
     </li>
   );

@@ -10,7 +10,13 @@ const FILTERS = [
   ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited)],
   ["gold", "Gold standard", (s) => s.gold?.status === "done"],
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready"],
+  // Upgrade (CCU) store. With a ship picked under "Upgrade from", only upgrades that ship can actually take count.
+  ["deals", "Upgrade deals", (s, x) => ups(s, x).some((u) => s.ccu && u.price < s.ccu.value)],
+  ["ccu", "Upgradable", (s, x) => ups(s, x).length > 0],
 ];
+// Upgrade filters also look at ships you can only get by upgrading right now, not as a standalone ship.
+const UPGRADE_FILTERS = ["deals", "ccu"];
+const ups = (s, x) => (s.upgrades || []).filter((u) => !x?.costs || (x.from !== s.key && u.sku in x.costs));
 const SIZES = ["Vehicle", "Snub", "Small", "Medium", "Large", "Capital"];
 // Release patch '3.24.3' -> comparable numbers; ships without one (concepts, unknown) sort last.
 const rel = (s) => (s.released ? s.released.split(".").map(Number) : null);
@@ -110,19 +116,35 @@ export function App({ data: first }) {
   const ships = data.ships;
   const inStore = useMemo(() => ships.filter((s) => s.inStore), [ships]);
   const makers = useMemo(() => [...new Set(ships.map((s) => s.maker).filter(Boolean))].sort(), [ships]);
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map(([k, , fn]) => [k, inStore.filter(fn).length])), [inStore]);
+  const sellable = useMemo(() => ships.filter((s) => s.inStore || s.upgrades), [ships]);
+
+  // Picking a ship under "Upgrade from" asks the server what it can upgrade into right now (RSI's upgrade tool).
+  const fromShip = ships.find((s) => s.key === st.from);
+  const ref = fromShip?.ccu?.ref;
+  const [costs, setCosts] = useState({ ref: null, map: null });
+  useEffect(() => {
+    if (!ref) return;
+    let live = true;
+    fetch(`/upgrades/${ref}.json`).then((r) => (r.ok ? r.json() : null))
+      .then((d) => live && d && setCosts({ ref, map: d.costs })).catch(() => {});
+    return () => { live = false; };
+  }, [ref]);
+  const ctx = useMemo(() => ({ from: st.from, costs: ref && costs.ref === ref ? costs.map : null }), [st.from, ref, costs]);
+
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map(([k, , fn]) =>
+    [k, (UPGRADE_FILTERS.includes(k) ? sellable : inStore).filter((s) => fn(s, ctx)).length])), [inStore, sellable, ctx]);
 
   const shown = useMemo(() => {
     const q = norm(st.q);
-    const pool = st.view === "all" ? ships : inStore;
     const active = FILTERS.filter(([k]) => st.f.includes(k));
+    const pool = st.view === "all" ? ships : active.some(([k]) => UPGRADE_FILTERS.includes(k)) ? sellable : inStore;
     return pool
       .filter((s) => !q || norm(`${s.name} ${s.maker} ${s.makerCode} ${s.role}`).includes(q))
-      .filter((s) => active.every(([, , fn]) => fn(s)))
+      .filter((s) => active.every(([, , fn]) => fn(s, ctx)))
       .filter((s) => !st.maker || s.maker === st.maker)
       .filter((s) => !st.size || s.size === st.size)
       .sort((a, b) => SORTS[st.sort][1](a, b) || a.name.localeCompare(b.name));
-  }, [ships, inStore, st]);
+  }, [ships, inStore, sellable, st, ctx]);
 
   const [rate, setRate] = useState(savedRate);
   const changeRate = (v) => {
@@ -130,9 +152,10 @@ export function App({ data: first }) {
     setRate(n);
     try { localStorage.setItem(RATE_KEY, String(n)); } catch {}
   };
-  // Ships you might own, valued at their standard price: in the store now, else the latest standard price seen in the
-  // pledge or upgrade store (the wiki's history). Upgrades go from that value to a target's standard price.
+  // Ships you might own, valued as RSI's upgrade tool values them; failing that, at their standard price in the store
+  // now, else the latest standard price seen in the pledge or upgrade store (the wiki's history).
   const upgradable = useMemo(() => ships.map((s) => {
+    if (s.ccu) return [s.key, s.name, s.ccu.value, ""];
     const std = s.editions.find((e) => e.inStore && e.label === "Standard");
     if (std) return [s.key, s.name, std.price, ""];
     const last = (s.history || []).filter((h) => !h[2]).pop();
@@ -231,7 +254,7 @@ export function App({ data: first }) {
           </p>
 
           {shown.length ? (
-            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromPrice={fromPrice} version={data.gameVersion} />)}</ul>
+            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromName={fromShip?.name} fromPrice={fromPrice} ctx={ctx} version={data.gameVersion} />)}</ul>
           ) : (
             <p class="empty">
               {st.f.includes("sale") || st.f.includes("limited")
@@ -259,7 +282,7 @@ export function App({ data: first }) {
   );
 }
 
-function Ship({ ship: s, now, rate, from, fromPrice, version }) {
+function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, version }) {
   const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
@@ -268,7 +291,8 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
     s.released ? (s.released === "0" ? "in game since the hangar module" : `in game since ${s.released}`) : ""]
     .filter(Boolean).join(" · ");
   const notFlyable = s.status && s.status !== "Flight ready";
-  const upgrade = from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
+  // A rough upgrade cost (target's standard price minus yours) only until RSI's real answer is in.
+  const upgrade = !ctx.costs && from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
   const buy = low(s.buy), rent = low(s.rent);
   return (
     <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
@@ -310,7 +334,8 @@ function Ship({ ship: s, now, rate, from, fromPrice, version }) {
             <span class="ins">per day</span>
           </div>
         ) : null}
-        {!s.inStore ? (
+        <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} />
+        {!s.inStore && !s.upgrades ? (
           <p class="notin">
             Not in the store
             {s.editions.length ? `, last seen ${ago(Math.max(...s.editions.map((e) => e.lastSeen)), now)}` : ""}
@@ -606,6 +631,36 @@ function Edition({ e, standard, upgrade }) {
       {upgrade ? <span class="up">upgrade +{money(upgrade)}</span> : null}
       {state ? <span class="state">{state}</span> : null}
     </a>
+  );
+}
+
+// The upgrades to this ship on sale now. With a ship picked under "Upgrade from" and RSI's answer in: what each one
+// that ship can take costs from it.
+function Upgrades({ s, from, fromName, costs }) {
+  const list = s.upgrades || [];
+  if (!list.length || from === s.key) return null;
+  const value = s.ccu?.value || 0;
+  if (from && costs) {
+    const mine = list.filter((u) => u.sku in costs).sort((a, b) => costs[a.sku] - costs[b.sku]);
+    if (!mine.length) {
+      return <p class="ccu muted">Upgrades on sale ({list.map((u) => `${u.label} ${money(u.price)}`).join(", ")}), but not from your {fromName}</p>;
+    }
+    return (
+      <p class="ccu">
+        <span class="k">From your {fromName}</span>
+        {mine.map((u) => <span class={`u${u.price < value ? " deal" : ""}`}><b>+{money(costs[u.sku])}</b> {u.label}</span>)}
+      </p>
+    );
+  }
+  return (
+    <p class="ccu">
+      <span class="k">Upgrade to it</span>
+      {list.map((u) => (
+        <span class={`u${u.price < value ? " deal" : ""}`}>
+          {u.label} <b>{money(u.price)}</b>{u.price < value ? ` (saves ${money(value - u.price)})` : ""}
+        </span>
+      ))}
+    </p>
   );
 }
 

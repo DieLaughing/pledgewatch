@@ -37,6 +37,16 @@ def edition(name, url):
     return "Standard"
 
 
+def upgrade_label(title):
+    """'BIS Warbond Edition' -> 'BIS Warbond', 'Aegis Reclaimer Best in Show Edition Upgrade' -> 'Best in Show'."""
+    t = re.sub(r"\s*(Edition|Upgrade)\b", "", title).strip()
+    if re.search(r"best in show", t, re.I):
+        return "Best in Show"
+    if re.search(r"^(anvil|aegis|drake|rsi|origin|misc|crusader)\b", t, re.I):  # 'Anvil Carrack Upgrade'
+        return "Special"
+    return t or "Standard"
+
+
 def build(db, now=None):
     """Everything the page shows, as one dict."""
     now = int(now or time.time())
@@ -76,6 +86,17 @@ def build(db, now=None):
         })
         if not ship["img"]:
             ship["img"] = s["image"]
+    # The upgrade (CCU) store: what each ship is worth as an upgrade (msrp, RSI's id for it) and the upgrades to it
+    # on sale now. Ships with no Ship Matrix match (rare) are left out rather than added as bare entries.
+    for u in db.execute("SELECT id, name, msrp FROM upgrade_ships"):
+        ship = ships.get(match_key(matrix, u["name"]))
+        if ship is not None and norm(ship["name"]) == norm(u["name"]):
+            ship["ccu"] = {"ref": u["id"], "value": u["msrp"]}
+    for u in db.execute("SELECT sku, name, title, price FROM upgrade_skus WHERE listed=1 ORDER BY price"):
+        ship = ships.get(match_key(matrix, u["name"]))
+        if ship is not None:
+            ship.setdefault("upgrades", []).append({"sku": u["sku"], "label": upgrade_label(u["title"]),
+                                                    "price": u["price"]})
     grids = cargo_grids.lookup(db)
     released = release.lookup(db)
     gold = release.gold(db)
@@ -136,6 +157,9 @@ def _img_id(url):
     return hashlib.sha1(url.encode()).hexdigest()[:16]
 
 
+COSTS_TTL = 600  # seconds an answer from RSI's upgrade tool is reused
+SESSION_TTL = 1200  # RSI's guest upgrade session lasts 30 minutes
+
 # View channels, send messages, embed links, read history, mention roles (so role pings work even when the role
 # isn't set to mentionable).
 INVITE_PERMISSIONS = 216064
@@ -152,12 +176,13 @@ analytics on this website.</p>
 <h2>The website</h2>
 <p>Pages are served through Cloudflare, which sees visitors' IP addresses to deliver and protect the site, as any
 Cloudflare site does. Pledge Watch itself keeps no visitor logs. Your "aUEC an hour" figure is stored only in your own
-browser.</p>
+browser. When you pick a ship under "Upgrade from", the site asks RSI's public upgrade tool what that ship can upgrade
+into; RSI sees Pledge Watch's request, never yours, and nothing about you is sent or kept.</p>
 <h2>The Discord and Fluxer bot</h2>
 <p>It stores only what it needs to work:</p>
 <ul>
 <li>For each server that runs <code>/alerts setup</code>: the server, channel and (optional) role IDs.</li>
-<li>For each <code>/watch</code>: your user ID, the ship name you typed, and which server you ran it in.</li>
+<li>For each <code>/watch</code>: your user ID, the ship name or price you typed, and which server you ran it in.</li>
 </ul>
 <p>It doesn't read messages in your server (Discord doesn't send it any, and on Fluxer it only answers commands that
 start with <code>!</code> in its own channel), and it never stores message content, names or avatars.</p>
@@ -218,6 +243,9 @@ class Site:
         self.page = self.page_gz = self.api = self.api_gz = b""
         self.images = {}
         self.etag = ""
+        self.costs = {}  # upgrade ship id -> (fetched at, {sku: cost})
+        self.costs_lock = asyncio.Lock()
+        self.upgrade_session = None  # (made at, upgrades.Session)
 
     def refresh(self):
         """Rebuild the page from the database. Called at start and after every store check."""
@@ -281,6 +309,32 @@ class Site:
             return web.FileResponse(os.path.join(self.dist, name), headers={"Cache-Control": "public, max-age=604800"})
         return handler
 
+    async def upgrade_costs(self, request):
+        """What one ship can upgrade into right now and what each costs from it, straight from RSI's upgrade tool.
+        Kept for COSTS_TTL, and one RSI request at a time, so busy moments can't turn into a flood of requests."""
+        ref = int(request.match_info["ref"])
+        if not self.db.execute("SELECT 1 FROM upgrade_ships WHERE id=?", (ref,)).fetchone():
+            raise web.HTTPNotFound()
+        async with self.costs_lock:
+            hit = self.costs.get(ref)
+            if not hit or time.time() - hit[0] > COSTS_TTL:
+                try:
+                    hit = self.costs[ref] = (time.time(), await asyncio.to_thread(self._fetch_costs, ref))
+                except Exception as e:
+                    log.warning("upgrade costs for %s: %s", ref, e)
+                    self.upgrade_session = None
+                    if not hit:
+                        raise web.HTTPBadGateway()
+        body = json.dumps({"ref": ref, "at": int(hit[0]), "costs": hit[1]}, separators=(",", ":"))
+        return web.Response(text=body, content_type="application/json",
+                            headers={"Cache-Control": f"public, max-age={COSTS_TTL // 2}"})
+
+    def _fetch_costs(self, ref):
+        from .upgrades import Session
+        if not self.upgrade_session or time.time() - self.upgrade_session[0] > SESSION_TTL:
+            self.upgrade_session = (time.time(), Session())
+        return self.upgrade_session[1].costs(ref)
+
     async def privacy(self, request):
         return web.Response(text=PRIVACY, content_type="text/html", headers={"Cache-Control": "public, max-age=3600"})
 
@@ -295,6 +349,7 @@ class Site:
         app.router.add_get("/", self.index)
         app.router.add_get("/ships.json", self.ships_json)
         app.router.add_get("/img/{id:[0-9a-f]{16}}.jpg", self.image)
+        app.router.add_get("/upgrades/{ref:[0-9]{1,6}}.json", self.upgrade_costs)
         app.router.add_get("/healthz", self.health)
         app.router.add_get("/privacy", self.privacy)
         app.router.add_get("/terms", self.terms)

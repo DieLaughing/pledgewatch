@@ -84,3 +84,17 @@ def test_upgrade_message_without_owner_ship():
          "url": upgrades.PAGE, "image": ""}
     fields = message(e, 0, users=["u"])["embeds"][0]["fields"]
     assert {"name": "Standard", "value": "$600 (saves $30)", "inline": True} in fields
+
+
+def test_site_shows_upgrades_and_values(tmp_path):
+    from pw import site
+    db = store_db.connect(str(tmp_path / "t.db"))
+    with db:
+        db.execute("INSERT INTO catalog (name, key) VALUES ('Carrack', 'carrack'), "
+                   "('M2 Hercules Starlifter', 'm2 hercules starlifter')")
+    upgrades.check(db, ships((CARRACK, {"id": 4, "title": "BIS Warbond Edition", "price": 56000})), now=1)
+    by = {s["name"]: s for s in site.build(db)["ships"]}
+    assert by["Carrack"]["ccu"] == {"ref": CARRACK, "value": 60000}
+    assert [(u["label"], u["price"]) for u in by["Carrack"]["upgrades"]] == [("BIS Warbond", 56000), ("Standard", 60000)]
+    assert by["M2 Hercules Starlifter"]["ccu"]["value"] == 52000 and "upgrades" not in by["M2 Hercules Starlifter"]
+    assert site.upgrade_label("Aegis Reclaimer Best in Show Edition Upgrade") == "Best in Show"

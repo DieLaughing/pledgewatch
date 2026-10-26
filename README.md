@@ -16,7 +16,8 @@ that posts when ships come in, sell out, change price or leave.
   DPS, sustained DPS and alpha, plus missiles and torpedoes, for the stock loadout.
 - **Gold standard:** ships that have had CIG's gold standard rework, or have one in progress, from the wiki's list.
 - **Price history:** past standard and warbond prices with dates, including the lowest and the last warbond.
-- **Upgrade costs:** pick a ship you own and see what upgrading to each other ship costs.
+- **Upgrades (CCUs):** every upgrade on sale per ship (standard, warbond, Best in Show) and what it saves. Pick a ship
+  you own and see exactly what it can upgrade into right now and what each costs, from RSI's own upgrade tool.
 - **Cargo grids** drawn from above, with every box labelled in SCU.
 - **Loaners** for ships that aren't flyable yet, and flight-status changes as they happen.
 - **A change log** of everything that came in, sold out, changed price or left.

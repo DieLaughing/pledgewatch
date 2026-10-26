@@ -35,7 +35,9 @@ export function Plan({ data }) {
           <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 L26 28 L16 22 L6 28 Z" /></svg>
           Pledge Watch
         </a>
-        <p class="checked"><a class="news" href="/">← All ships</a></p>
+        <nav class="menu" aria-label="Pages">
+          <a class="navbtn" href="/"><span aria-hidden="true">←</span> All ships</a>
+        </nav>
       </header>
       <section class="lede">
         <h1>Plan an upgrade</h1>

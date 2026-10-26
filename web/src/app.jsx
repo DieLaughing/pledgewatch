@@ -202,12 +202,14 @@ export function App({ data: first }) {
         </a>
         <p class="checked">
           <span class="dot" aria-hidden="true" />
-          <span class="when">Public RSI store{data.checkedAt ? `, checked ${ago(data.checkedAt, now)}` : ""}</span>
-          <a class="news" href="/whats-new" onClick={markSeen}>
+          Public RSI store{data.checkedAt ? `, checked ${ago(data.checkedAt, now)}` : ""}
+        </p>
+        <nav class="menu" aria-label="Pages">
+          <a class="navbtn" href="/whats-new" onClick={markSeen}>
             What's new{data.newest && seen < data.newest ? <span class="nd" aria-label="(new)" /> : null}
           </a>
-          <a class="news" href="/plan">Upgrade planner</a>
-        </p>
+          <a class="navbtn" href="/plan">Upgrade planner <span aria-hidden="true">→</span></a>
+        </nav>
       </header>
 
       <section class="lede">

@@ -74,7 +74,8 @@ def refresh(db, now=None, force=False):
     except Exception as e:
         log.warning("couldn't refresh in-game data: %s", e)
         return
-    rows = build_rows(wiki, vehicles, buys, rents)
+    ids = {norm(c["name"]): c["mid"] for c in db.execute("SELECT name, mid FROM catalog WHERE mid IS NOT NULL")}
+    rows = build_rows(wiki, vehicles, buys, rents, ids)
     with db:
         db.execute("DELETE FROM ingame")
         db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
@@ -83,10 +84,12 @@ def refresh(db, now=None, force=False):
     log.info("in-game data: %d ships from the wiki, %d buy and %d rent prices", len(rows), len(buys), len(rents))
 
 
-def build_rows(wiki, vehicles, buys, rents):
+def build_rows(wiki, vehicles, buys, rents, ids=None):
     """One row per Ship Matrix id: (mid, uuid, claim min, expedite min, expedite aUEC, version, history, buy, rent,
     wiki name, weapons). Several wiki entries can share an id (variants): insurance and weapons come from the one with
-    insurance data, and prices and history are merged across all of them. UEX is matched by game UUID, or by name when UEX has no UUID."""
+    insurance data, and prices and history are merged across all of them. UEX is matched by game UUID, or by name when UEX has no UUID.
+    `ids` ({normalised Ship Matrix name: id}) places wiki entries that aren't linked to the Ship Matrix yet, which
+    happens with newly released ships (Constellation Mk V Centaurus), by their exact name."""
     uex = {v["id"]: (v.get("uuid") or "", norm(v.get("name") or "")) for v in vehicles}
     prices = {}
     for kind, rows, field in (("buy", buys, "price_buy"), ("rent", rents, "price_rent")):
@@ -98,9 +101,12 @@ def build_rows(wiki, vehicles, buys, rents):
                     if key:
                         prices.setdefault((key, kind), []).append(row)
     groups = {}
+    ids = ids or {}
     for v in wiki:
-        if v.get("id"):
-            groups.setdefault(v["id"], []).append(v)
+        mid = v.get("id") or next((ids[norm(n)] for n in (v.get("shipmatrix_name"), v.get("name"))
+                                   if n and norm(n) in ids), None)
+        if mid:
+            groups.setdefault(str(mid), []).append(v)
     out = []
     for mid, vs in groups.items():
         main = max(vs, key=lambda v: (bool((v.get("insurance") or {}).get("claim_time")), len(v.get("skus") or [])))

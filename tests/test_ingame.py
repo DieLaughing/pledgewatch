@@ -32,6 +32,14 @@ def test_rows_merge_variants_and_join_uex_by_uuid_or_name():
     assert '"Nowhere"' in polaris[7]  # UEX had no UUID for it, matched by name
 
 
+def test_new_ships_the_wiki_hasnt_linked_yet_match_by_name():
+    wiki = [{"id": None, "uuid": "u-c", "name": "Constellation Mk V Centaurus", "shipmatrix_name": None,
+             "insurance": {"claim_time": 13.5, "expedite_time": 4.5, "expedite_cost": 6750}, "skus": []},
+            {"id": None, "uuid": "u-x", "name": "Some Wikelo Special", "insurance": {}, "skus": []}]
+    rows = build_rows(wiki, [], [], [], {"constellation mk v centaurus": "325"})
+    assert [(r[0], r[2], r[4]) for r in rows] == [("325", 13.5, 6750)]
+
+
 def test_weapons_list_every_gun_by_who_fires_it():
     gun = lambda name, dps: {"name": name, "dps": dps, "sustained_dps": dps / 2, "alpha": dps / 10}
 

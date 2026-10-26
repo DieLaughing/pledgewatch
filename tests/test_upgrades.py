@@ -50,7 +50,7 @@ def test_new_warbond_upgrade_pings_matching_price_watches(tmp_path):
     assert [c for c, _ in discord.sent] == ["c-home", "c-home"]  # not c-other: nobody there asked
     m = discord.sent[1][1]
     assert m["embeds"][0]["author"]["name"] == "Warbond upgrade price drop"
-    assert {"name": "Upgrade cost", "value": "From M2 Hercules Starlifter: **$40**", "inline": False} \
+    assert {"name": "You pay", "value": "From M2 Hercules Starlifter: **$40**", "inline": False} \
         in m["embeds"][0]["fields"]
     assert m["allowed_mentions"] == {"roles": [], "users": ["above", "m2"]}
 

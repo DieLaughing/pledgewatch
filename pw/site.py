@@ -38,12 +38,11 @@ def edition(name, url):
 
 
 def upgrade_label(title):
-    """'BIS Warbond Edition' -> 'BIS Warbond', 'Aegis Reclaimer Best in Show Edition Upgrade' -> 'Best in Show'."""
-    t = re.sub(r"\s*(Edition|Upgrade)\b", "", title).strip()
-    if re.search(r"best in show", t, re.I):
+    """'BIS Warbond Edition' -> 'BIS Warbond', 'Aegis Reclaimer Best in Show Edition Upgrade' -> 'Best in Show'.
+    One-off upgrades keep RSI's own name ('Anvil Carrack Upgrade'): they tend to apply from certain ships only."""
+    if re.search(r"best in show", title, re.I):
         return "Best in Show"
-    if re.search(r"^(anvil|aegis|drake|rsi|origin|misc|crusader)\b", t, re.I):  # 'Anvil Carrack Upgrade'
-        return "Special"
+    t = re.sub(r"\s*Edition\b", "", title).strip()
     return t or "Standard"
 
 

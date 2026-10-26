@@ -160,18 +160,18 @@ def _upgrade_message(e, ts, label, colour, users, froms):
     if warbond:
         label = "Warbond " + label[0].lower() + label[1:]
     fields = [{"name": "Edition", "value": e["title"], "inline": True},
-              {"name": "Upgrades to", "value": money(e["price"]), "inline": True}]
+              {"name": "Upgrade value", "value": money(e["price"]), "inline": True}]
     if e.get("was"):
         fields.append({"name": "Was", "value": money(e["was"]), "inline": True})
     elif e.get("msrp") and e["msrp"] > e["price"]:
         fields.append({"name": "Standard", "value": f"{money(e['msrp'])} (saves {money(e['msrp'] - e['price'])})",
                        "inline": True})
     if froms:
-        fields.append({"name": "Upgrade cost", "value": "\n".join(f"From {n}: **{money(c)}**" for n, c in froms),
+        fields.append({"name": "You pay", "value": "\n".join(f"From {n}: **{money(c)}**" for n, c in froms),
                        "inline": False})
     note = "Warbond: new money only, no store credit · " if warbond else ""
     embed = {"author": {"name": label}, "title": e["name"], "url": e["url"], "color": colour, "fields": fields,
-             "footer": {"text": note + "Buy from the upgrade page in your RSI hangar · USD before tax"},
+             "footer": {"text": note + "You pay the upgrade value minus your ship's · Bought in RSI's upgrade tool · USD"},
              "timestamp": _iso(ts)}
     if e.get("image"):
         embed["thumbnail"] = {"url": e["image"]}

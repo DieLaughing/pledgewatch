@@ -40,6 +40,7 @@ const SORTS = {
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
 const RATE_KEY = "pw-rate";
+const CCU_TOOL = "https://robertsspaceindustries.com/en/pledge/ship-upgrade-ccu";
 const SEEN_KEY = "pw-seen";  // newest What's new date this browser has opened
 function savedRate() {
   try { return Number(localStorage.getItem(RATE_KEY)) || 500000; } catch { return 500000; }
@@ -176,6 +177,7 @@ export function App({ data: first }) {
     ...(st.maker ? [[st.maker, () => set({ maker: "" })]] : []),
     ...(st.size ? [[st.size, () => set({ size: "" })]] : []),
   ];
+  const pickShip = () => { sheet.current?.showModal(); document.getElementById("from")?.focus(); };
   const [seen, setSeen] = useState(() => { try { return localStorage.getItem(SEEN_KEY) || ""; } catch { return ""; } });
   const markSeen = () => { try { localStorage.setItem(SEEN_KEY, data.newest); } catch {} setSeen(data.newest); };
 
@@ -307,7 +309,7 @@ export function App({ data: first }) {
           </dialog>
 
           {shown.length ? (
-            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromName={fromShip?.name} fromPrice={fromPrice} ctx={ctx} version={data.gameVersion} />)}</ul>
+            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromName={fromShip?.name} fromPrice={fromPrice} ctx={ctx} pickShip={pickShip} version={data.gameVersion} />)}</ul>
           ) : (
             <p class="empty">
               {st.f.includes("sale") || st.f.includes("limited")
@@ -335,7 +337,7 @@ export function App({ data: first }) {
   );
 }
 
-function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, version }) {
+function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, version }) {
   const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
@@ -394,7 +396,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, version }) {
           </p>
         ) : null}
       </div>
-      <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} />
+      <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} pickShip={pickShip} />
       {open ? <Details s={s} rate={rate} version={version} /> : null}
     </li>
   );
@@ -687,33 +689,50 @@ function Edition({ e, standard, upgrade }) {
   );
 }
 
-// The upgrades to this ship on sale now. With a ship picked under "Upgrade from" and RSI's answer in: what each one
-// that ship can take costs from it.
-function Upgrades({ s, from, fromName, costs }) {
+// The upgrades (CCUs) to this ship on sale now. An upgrade's price is the ship's value as an upgrade target: you pay it
+// minus the value of the ship you upgrade from. With a ship picked under "I own" and RSI's answer in, show exactly what
+// each upgrade that ship can take costs from it.
+function Upgrades({ s, from, fromName, costs, pickShip }) {
+  const [why, setWhy] = useState(false);
   const list = s.upgrades || [];
   if (!list.length || from === s.key) return null;
   const value = s.ccu?.value || 0;
+  const tool = <a class="tool" href={CCU_TOOL} target="_blank" rel="noopener">RSI upgrade tool ↗</a>;
   if (from && costs) {
     const mine = list.filter((u) => u.sku in costs).sort((a, b) => costs[a.sku] - costs[b.sku]);
     if (!mine.length) {
-      return <p class="ccu muted">Upgrades on sale ({list.map((u) => `${u.label} ${money(u.price)}`).join(", ")}), but not from your {fromName}</p>;
+      return <p class="ccu muted">Upgrades to it are on sale ({list.map((u) => u.label).join(", ")}), but none apply from your {fromName}</p>;
     }
     return (
       <p class="ccu">
-        <span class="k">From your {fromName}</span>
-        {mine.map((u) => <span class={`u${u.price < value ? " deal" : ""}`}><b>+{money(costs[u.sku])}</b> {u.label}</span>)}
+        <span class="k">You pay from your {fromName}</span>
+        {mine.map((u) => <span class={`u${u.price < value ? " deal" : ""}`}><b>{money(costs[u.sku])}</b> {u.label}</span>)}
+        {tool}
       </p>
     );
   }
+  const low = list.find((u) => !/upgrade$/i.test(u.label)) || list[0];  // a regular edition makes the clearer example
   return (
-    <p class="ccu">
-      <span class="k">Upgrade to it</span>
+    <div class="ccu">
+      <span class="k">
+        Upgrade value
+        <button type="button" class="why" aria-expanded={why} aria-label="What's an upgrade value?" onClick={() => setWhy(!why)}>?</button>
+      </span>
       {list.map((u) => (
         <span class={`u${u.price < value ? " deal" : ""}`}>
           {u.label} <b>{money(u.price)}</b>{u.price < value ? ` (saves ${money(value - u.price)})` : ""}
         </span>
       ))}
-    </p>
+      <button type="button" class="link mine" onClick={pickShip}>What would I pay?</button>
+      {why ? (
+        <p class="explain">
+          An upgrade (CCU) turns a ship you already own into this one. You pay the upgrade value minus your ship's value:
+          {low.price > 10000 ? ` from a $100 ship, the ${low.label}${/upgrade$/i.test(low.label) ? "" : " upgrade"} costs ${money(low.price - 10000)}.` : " the difference."}{" "}
+          Upgrades are bought in RSI's upgrade tool while logged in, not on the ship's store page. Warbond and one-off
+          upgrades often only work from certain ships, so pick yours to see what really applies. {tool}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

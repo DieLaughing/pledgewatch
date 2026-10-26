@@ -233,6 +233,12 @@ html:has(.sheet[open]) { overflow: hidden; }
 .ccu b { color: var(--fg); font: 600 13px var(--mono); font-variant-numeric: tabular-nums; }
 .ccu .deal, .ccu .deal b { color: var(--wb); }
 .ccu.muted { font-size: 12px; }
+.ccu .k { display: inline-flex; align-items: center; gap: 6px; }
+.why { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 600 11px/16px var(--sans); cursor: pointer; }
+.why[aria-expanded="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.ccu .mine, .ccu .tool { font-size: 13px; color: var(--accent); }
+.ccu .tool { text-decoration: none; white-space: nowrap; }
+.explain { flex: 1 0 100%; margin: 4px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--sunk); color: var(--fg); font-size: 13px; line-height: 1.5; text-align: left; }
 .ed.soldout .state { color: var(--bad); }
 .notin { margin: 0; color: var(--muted); font-size: 13px; text-align: right; }
 

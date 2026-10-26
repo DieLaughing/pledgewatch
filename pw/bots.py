@@ -32,19 +32,33 @@ def discord_client(db, home_guild, poster=None):
                     "Ask a server admin to run `/alerts setup`.")
         return ""
 
-    @tree.command(name="watch", description="Get pinged when a ship comes into the public store")
-    @app_commands.describe(ship="Ship name, or part of it, like Idris")
+    @tree.command(name="watch", description="Get pinged about a ship, or anything over a price (for upgrades/CCUs)")
+    @app_commands.describe(ship="Ship name, or part of it, like Idris",
+                           above="Any ship or upgrade worth more than this many dollars, like 520",
+                           from_="A ship you own: upgrades it can take, with what they cost from it")
+    @app_commands.rename(from_="from")
     @app_commands.guild_only()
-    async def watch(inter: discord.Interaction, ship: str):
-        reply = cmd.watch(db, p, str(inter.user.id), ship, guild=where(inter)) + no_channel_note(inter)
+    async def watch(inter: discord.Interaction, ship: str | None = None,
+                    above: app_commands.Range[int, 1, 99999] | None = None, from_: str | None = None):
+        given = [q for q in (ship, above and f"above:{above}", from_ and f"from:{from_}") if q]
+        if len(given) != 1:
+            reply = "Pick one: a `ship`, `above` a price, or `from` a ship you own."
+        else:
+            reply = cmd.watch(db, p, str(inter.user.id), given[0], guild=where(inter)) + no_channel_note(inter)
         await inter.response.send_message(reply, ephemeral=True)
 
     @watch.autocomplete("ship")
     async def watch_names(inter: discord.Interaction, current: str):
         return [app_commands.Choice(name=n[:100], value=n[:100]) for n in cmd.names(db, current)]
 
+    @watch.autocomplete("from_")
+    async def from_names(inter: discord.Interaction, current: str):
+        rows = db.execute("SELECT name FROM upgrade_ships ORDER BY name").fetchall()
+        return [app_commands.Choice(name=r[0][:100], value=r[0][:100]) for r in rows
+                if cmd.norm(current) in cmd.norm(r[0])][:25]
+
     @tree.command(name="unwatch", description="Stop getting pinged about a ship")
-    @app_commands.describe(ship="A ship you're watching, or all")
+    @app_commands.describe(ship="Something you're watching, or all")
     @app_commands.guild_only()
     async def unwatch(inter: discord.Interaction, ship: str):
         await inter.response.send_message(cmd.unwatch(db, p, str(inter.user.id), ship), ephemeral=True)
@@ -52,9 +66,9 @@ def discord_client(db, home_guild, poster=None):
     @unwatch.autocomplete("ship")
     async def unwatch_names(inter: discord.Interaction, current: str):
         mine = cmd._mine(db, p, str(inter.user.id)) + ["all"]
-        return [app_commands.Choice(name=q, value=q) for q in mine if cmd.norm(current) in q][:25]
+        return [app_commands.Choice(name=q[:100], value=q[:100]) for q in mine if cmd.norm(current) in cmd.norm(q)][:25]
 
-    @tree.command(name="watching", description="The ships you're watching")
+    @tree.command(name="watching", description="What you're watching")
     async def watching(inter: discord.Interaction):
         await inter.response.send_message(cmd.watching(db, p, str(inter.user.id)), ephemeral=True)
 
@@ -177,7 +191,7 @@ def fluxer_reply(db, content, user, guild=""):
         return f"Did you mean `!{close[0]}`? `!help` lists everything." if close and content[0] == "!" else None
     p = "fluxer"
     if name == "watch":
-        return cmd.watch(db, p, user, arg, guild=guild) if arg else "Which ship? Like `!watch Idris`."
+        return cmd.watch(db, p, user, arg, guild=guild) if arg else "Which ship? Like `!watch Idris`, `!watch above:520` or `!watch from:M2 Hercules`."
     if name == "unwatch":
         return cmd.unwatch(db, p, user, arg) if arg else "Which ship? Like `!unwatch Idris`, or `!unwatch all`."
     if name == "watching":

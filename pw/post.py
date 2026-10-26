@@ -27,6 +27,7 @@ KINDS = {
     "price":      ("Price change",          0x8F8CF2, False),
     "status":     ("Flight status changed", 0x5B8DEF, False),
     "loaners":    ("Loaners changed",       0x5B8DEF, False),
+    "upgrade":    ("Upgrade in store",      0x3ECF8E, False),
     "store_down": ("Can't read the store",  0x8B97A8, False),
     "store_ok":   ("Store readable again",  0x8B97A8, False),
 }
@@ -77,10 +78,13 @@ def ago(ts, now):
     return "earlier today"
 
 
-def message(e, ts, role=None, users=(), info=None):
+def message(e, ts, role=None, users=(), info=None, froms=()):
     """Build the message for one event. `users` are people watching this ship, pinged by name. `info` is the
-    ship's status and loaners from the catalog, shown when it isn't flight ready."""
+    ship's status and loaners from the catalog, shown when it isn't flight ready. `froms` are (ship, cost) pairs for
+    an upgrade: what it costs from the ships the pinged people own."""
     label, colour, ping = KINDS[e["kind"]]
+    if e["kind"] == "upgrade":
+        return _upgrade_message(e, ts, label, colour, users, froms)
     if e["kind"] in ("store_down", "store_ok"):
         text = (f"The RSI store has failed {e.get('fails', 3)} checks in a row. Alerts are paused until it answers "
                 f"again.\n-# {e.get('reason', '')}") if e["kind"] == "store_down" else "Alerts are back on."
@@ -146,6 +150,38 @@ def _matrix_message(e, ts, label, colour, users):
     return msg
 
 
+def _upgrade_message(e, ts, label, colour, users, froms):
+    """An upgrade (CCU) edition came into the upgrade store, came back, or got cheaper. Only posted to ping watchers."""
+    warbond = "warbond" in e["title"].lower()
+    if e.get("was"):
+        label = "Upgrade price drop"
+    elif e.get("back"):
+        label = "Upgrade back in store"
+    if warbond:
+        label = "Warbond " + label[0].lower() + label[1:]
+    fields = [{"name": "Edition", "value": e["title"], "inline": True},
+              {"name": "Upgrades to", "value": money(e["price"]), "inline": True}]
+    if e.get("was"):
+        fields.append({"name": "Was", "value": money(e["was"]), "inline": True})
+    elif e.get("msrp") and e["msrp"] > e["price"]:
+        fields.append({"name": "Standard", "value": f"{money(e['msrp'])} (saves {money(e['msrp'] - e['price'])})",
+                       "inline": True})
+    if froms:
+        fields.append({"name": "Upgrade cost", "value": "\n".join(f"From {n}: **{money(c)}**" for n, c in froms),
+                       "inline": False})
+    note = "Warbond: new money only, no store credit · " if warbond else ""
+    embed = {"author": {"name": label}, "title": e["name"], "url": e["url"], "color": colour, "fields": fields,
+             "footer": {"text": note + "Buy from the upgrade page in your RSI hangar · USD before tax"},
+             "timestamp": _iso(ts)}
+    if e.get("image"):
+        embed["thumbnail"] = {"url": e["image"]}
+    msg = {"embeds": [embed], "allowed_mentions": {"parse": []}}
+    if users:
+        msg["content"] = " ".join(f"<@{u}>" for u in users)
+        msg["allowed_mentions"] = {"roles": [], "users": list(users)}
+    return msg
+
+
 def _iso(ts):
     return datetime.datetime.fromtimestamp(ts, datetime.UTC).isoformat()
 
@@ -155,7 +191,7 @@ def flush(db, apps, now=None):
     A server that has blocked the bot (no access to its channel, channel deleted) is switched off, not retried."""
     from . import servers
     from .catalog import info
-    from .commands import watchers
+    from .commands import from_costs, watchers
     now = int(now or time.time())
     by_name = {a.name: a for a in apps}
     dests = [d for d in servers.active(db) if d["platform"] in by_name]
@@ -170,7 +206,14 @@ def flush(db, apps, now=None):
             if key in posted or key in off or d["added"] > row["ts"] or d["platform"] in posted:
                 continue  # done, switched off this round, set up after the event, or posted before per-server keys
             try:
-                msg = message(e, row["ts"], d["role_id"] or None, watchers(db, d["platform"], e, d["guild_id"]), ship)
+                users = watchers(db, d["platform"], e, d["guild_id"])
+                if e["kind"] == "upgrade":  # upgrades only go to servers where someone asked for them
+                    if not users:
+                        posted[key] = False
+                        continue
+                    msg = message(e, row["ts"], users=users, froms=from_costs(db, d["platform"], e, d["guild_id"], users))
+                else:
+                    msg = message(e, row["ts"], d["role_id"] or None, users, ship)
                 posted[key] = by_name[d["platform"]].send(d["channel_id"], msg).get("id", True)
             except urllib.error.HTTPError as err:
                 detail = err.read().decode(errors="replace")[:200]

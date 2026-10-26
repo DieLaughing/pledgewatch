@@ -32,6 +32,8 @@ optionally a role to ping). It's limited to 75 servers; if it's full, run your o
 | Command | What it does |
 |---|---|
 | `/watch <ship>` | Ping me when a matching ship comes in, restocks, runs low or changes price |
+| `/watch above:520` | Ping me when any ship or upgrade (CCU) worth more than $520 comes in, comes back or gets cheaper |
+| `/watch from:<ship>` | Ping me when an upgrade a ship I own can take comes in, comes back or gets cheaper, with what it costs from it |
 | `/unwatch <ship>` / `/unwatch all` | Stop |
 | `/watching` | The ships you're watching |
 | `/store [ship]` | Is it in the store right now? |
@@ -77,6 +79,9 @@ while the main container is recreated, and a lock in the data folder lets only o
 
 - `pw/store.py` reads the pledge store's listing (no login), `pw/diff.py` turns two looks into changes, and
   `pw/watcher.py` runs that every 5 minutes and logs them in SQLite.
+- `pw/upgrades.py` reads the upgrade (CCU) store the same way, as a logged-out guest: every ship's upgrade editions
+  and, for ships people watch with `from:`, exactly what each upgrade costs from them. Upgrade alerts are only posted
+  where someone asked for them.
 - `pw/post.py` posts changes to every server that set up alerts; `pw/bots.py` answers commands on Discord and Fluxer.
 - `pw/catalog.py`, `pw/ingame.py` and `pw/cargo.py` refresh RSI's Ship Matrix and Loaner Ship Matrix, the Star Citizen
   Wiki, UEX and sc-cargo.space once a day.

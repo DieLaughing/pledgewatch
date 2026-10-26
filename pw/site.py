@@ -98,7 +98,7 @@ def build(db, now=None):
     out.sort(key=lambda s: norm(s["name"]))
 
     changes = []
-    for e in db.execute("SELECT ts, kind, data FROM events WHERE kind NOT IN ('store_down', 'store_ok') "
+    for e in db.execute("SELECT ts, kind, data FROM events WHERE kind NOT IN ('store_down', 'store_ok', 'upgrade') "
                         "ORDER BY id DESC LIMIT 150"):
         d = json.loads(e["data"])
         changes.append({"ts": e["ts"], "kind": e["kind"], "name": d.get("name"), "price": d.get("price"),

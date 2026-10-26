@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from . import cargo, catalog, ingame, release
+from . import cargo, catalog, ingame, release, upgrades
 from . import db as store_db
 from .diff import diff
 from .post import flush
@@ -57,9 +57,18 @@ def tick(db, apps):
     cargo.refresh(db)
     ingame.refresh(db)
     release.refresh(db)
-    for e in catalog.refresh(db) + check(db):
+    for e in catalog.refresh(db) + check(db) + _upgrades(db):
         log.info("%s: %s", e["kind"], e.get("name", e.get("reason", "")))
     flush(db, apps)
+
+
+def _upgrades(db):
+    """The upgrade store is extra: whatever goes wrong there, the ship store's alerts and the website carry on."""
+    try:
+        return upgrades.check(db)
+    except Exception:
+        log.exception("upgrade check crashed")
+        return []
 
 
 async def run(path, apps, after=None):

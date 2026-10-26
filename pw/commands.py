@@ -10,6 +10,9 @@ ACCESS_NOTE = "-# I only see the public store, the one you see when logged out. 
 
 # Changes that ping the people watching a ship.
 WATCH_KINDS = {"new", "back", "restock", "low", "price", "status", "loaners"}
+# Changes that ping price watches (above:520, from:M2) when the price is over theirs. "upgrade" = the upgrade store.
+PRICE_KINDS = {"new", "back", "restock", "price", "upgrade"}
+SPECIAL = re.compile(r"^\s*(above|over|from)\s*[:=]?\s*(.*)$", re.I)
 
 
 def norm(s):
@@ -20,7 +23,84 @@ def matches(query, name):
     return norm(query) in norm(name)
 
 
+def special(db, query):
+    """Parse `above:520` or `from:M2`. Returns None for a plain ship name, an error message (str), or a dict with the
+    watch's key (what /watching and /unwatch show) and its columns."""
+    m = SPECIAL.match(query or "")
+    if not m:
+        return None
+    what, arg = m.group(1).lower(), m.group(2).strip()
+    if what in ("above", "over"):
+        digits = re.sub(r"[$,\s]|usd", "", arg.lower())
+        if not digits.isdigit() or not 0 < int(digits) < 100000:
+            return "Give a dollar amount, like `above:520`."
+        return {"key": f"above:${int(digits)}", "kind": "above", "amount": int(digits) * 100, "ref": None}
+    if not arg:
+        return "Which ship do you own? Like `from:M2 Hercules`."
+    found = _upgrade_ships(db, arg)
+    if isinstance(found, str):
+        return found
+    return {"key": f"from:{found['name']}", "kind": "from", "amount": found["msrp"], "ref": found["id"],
+            "name": found["name"]}
+
+
+def _upgrade_ships(db, arg):
+    rows = db.execute("SELECT id, name, msrp FROM upgrade_ships ORDER BY name").fetchall()
+    if not rows:
+        return "I haven't read the upgrade store yet. Try again in a few minutes."
+    q = norm(arg)
+    exact = [r for r in rows if norm(r["name"]) == q]
+    hits = exact or [r for r in rows if q in norm(r["name"])]
+    if len(hits) == 1:
+        return dict(hits[0])
+    if hits:
+        return (f"Which one? " + ", ".join(f"**{r['name']}**" for r in hits[:6])
+                + (f" and {len(hits) - 6} more" if len(hits) > 6 else "") + ". Give the full name.")
+    close = difflib.get_close_matches(q, [norm(r["name"]) for r in rows], n=3, cutoff=0.6)
+    names_ = [r["name"] for r in rows if norm(r["name"]) in close]
+    return f"I don't know a ship called **{arg}**." + (" Did you mean " + " or ".join(f"**{n}**" for n in names_) + "?"
+                                                      if names_ else "")
+
+
+def _watch_special(db, platform, user, w, now, guild):
+    if isinstance(w, str):
+        return w
+    mine = _mine(db, platform, user)
+    with db:
+        if w["key"] in mine:
+            db.execute("UPDATE watches SET guild_id=? WHERE platform=? AND user_id=? AND query=?",
+                       (guild, platform, user, w["key"]))
+            return f"You're already watching **{w['key']}**."
+        if len(mine) >= MAX_WATCHES:
+            return f"You're watching {MAX_WATCHES} things, which is the limit. Remove one with `unwatch` first."
+        db.execute("INSERT INTO watches (platform, user_id, query, created, guild_id, kind, amount, ref) "
+                   "VALUES (?,?,?,?,?,?,?,?)",
+                   (platform, user, w["key"], int(now or time.time()), guild, w["kind"], w["amount"], w["ref"]))
+    if w["kind"] == "above":
+        return (f"Watching **{w['key']}**. I'll ping you when a ship or an upgrade worth more than "
+                f"{money(w['amount'])} comes into the public store, comes back or gets cheaper.\n" + _above_now(db, w))
+    return (f"Watching **{w['key']}** ({money(w['amount'])}). I'll ping you when an upgrade it can take comes into "
+            f"the store, comes back or gets cheaper, with what it costs from your ship.\n" + _from_now(db, w))
+
+
+def _above_now(db, w):
+    n = db.execute("SELECT COUNT(*) FROM upgrade_skus WHERE listed=1 AND price > ?", (w["amount"],)).fetchone()[0]
+    return f"Right now {n} upgrade(s) over {money(w['amount'])} are on sale." if n else ""
+
+
+def _from_now(db, w):
+    rows = db.execute("SELECT name, title, price FROM upgrade_skus WHERE listed=1 AND price > ? ORDER BY price",
+                      (w["amount"],)).fetchall()
+    if not rows:
+        return "Nothing pricier than it is in the upgrade store right now."
+    top = ", ".join(f"{r['name']} ({r['title'].replace(' Edition', '')}, {money(r['price'])})" for r in rows[:4])
+    return (f"Upgrades priced over it right now: {top}" + (f" and {len(rows) - 4} more" if len(rows) > 4 else "")
+            + ". Some warbond ones only apply from certain ships; I'll only ping you about ones yours can take.")
+
+
 def watch(db, platform, user, query, now=None, guild=""):
+    if (w := special(db, query)) is not None:
+        return _watch_special(db, platform, user, w, now, guild)
     q = norm(query)
     if len(q) < 2:
         return "Give me at least two letters of a ship name, like `Idris` or `Carrack`."
@@ -48,7 +128,8 @@ def watch(db, platform, user, query, now=None, guild=""):
 
 
 def unwatch(db, platform, user, query):
-    q = norm(query)
+    w = special(db, query)
+    q = w["key"] if isinstance(w, dict) else query.strip() if SPECIAL.match(query or "") else norm(query)
     with db:
         if q == "all":
             n = db.execute("DELETE FROM watches WHERE platform=? AND user_id=?", (platform, user)).rowcount
@@ -64,9 +145,14 @@ def watching(db, platform, user):
     mine = _mine(db, platform, user)
     if not mine:
         return "You're not watching any ships. Add one with `watch`, like `watch Idris`."
-    lines = [f"You're watching {len(mine)} ship(s):"]
+    lines = [f"You're watching {len(mine)} thing(s):"]
     for q in mine:
-        lines.append(f"- **{q}**: " + _now_line(db, q, short=True))
+        if q.startswith("above:"):
+            lines.append(f"- **{q}**: ships and upgrades worth more")
+        elif q.startswith("from:"):
+            lines.append(f"- **{q}**: upgrades your ship can take")
+        else:
+            lines.append(f"- **{q}**: " + _now_line(db, q, short=True))
     return "\n".join(lines)
 
 
@@ -115,14 +201,37 @@ def names(db, current, limit=25):
 
 def watchers(db, platform, event, guild=""):
     """User ids on `platform` to ping for this event in `guild` (the server each person ran watch from)."""
-    if event["kind"] not in WATCH_KINDS or not event.get("name"):
+    if not event.get("name"):
         return []
-    rows = db.execute("SELECT user_id, query FROM watches WHERE platform=? AND guild_id=?", (platform, guild)).fetchall()
-    return sorted({r[0] for r in rows if matches(r[1], event["name"])})
+    rows = db.execute("SELECT user_id, query, kind, amount, ref FROM watches WHERE platform=? AND guild_id=?",
+                      (platform, guild)).fetchall()
+    return sorted({r["user_id"] for r in rows if _wants(r, event)})
+
+
+def _wants(w, e):
+    if w["kind"] == "name":
+        return e["kind"] in WATCH_KINDS and matches(w["query"], e["name"])
+    if e["kind"] not in PRICE_KINDS or e.get("price") is None or e["price"] <= (w["amount"] or 0):
+        return False
+    if e["kind"] == "price" and e["price"] > (e.get("was") or 0):
+        return False  # a price watch cares about it getting cheaper, not dearer
+    if w["kind"] == "from" and e["kind"] == "upgrade":
+        return str(w["ref"]) in (e.get("costs") or {})  # only upgrades this ship can actually take
+    return True
+
+
+def from_costs(db, platform, event, guild, users):
+    """[(ship name, cost)] for the from: watches pinged by this upgrade event, to show what it costs from each."""
+    costs = event.get("costs") or {}
+    rows = db.execute("SELECT DISTINCT query, ref FROM watches WHERE platform=? AND guild_id=? AND kind='from' "
+                      "AND user_id IN (%s)" % ",".join("?" * len(users)), (platform, guild, *users)).fetchall()
+    return sorted((r["query"][5:], costs[str(r["ref"])]) for r in rows if str(r["ref"]) in costs)
 
 
 HELP = """**Pledge Watch** posts changes in the public RSI pledge store: ships coming in, selling out, changing price or leaving.
 `{p}watch <ship>`: ping me about a ship (part of the name is fine, like `Idris`)
+`{p}watch above:520`: ping me about any ship or upgrade (CCU) worth more than $520
+`{p}watch from:M2 Hercules`: ping me about upgrades a ship I own can take, with what they cost from it
 `{p}unwatch <ship>` or `{p}unwatch all`: stop
 `{p}watching`: what I'm watching for you
 `{p}store [ship]`: is it in the store right now?

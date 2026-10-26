@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS ingame (
 );
 CREATE TABLE IF NOT EXISTS released (name TEXT PRIMARY KEY, patch TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS gold (name TEXT PRIMARY KEY, status TEXT NOT NULL, patch TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS upgrade_ships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, msrp INTEGER);
+CREATE TABLE IF NOT EXISTS upgrade_skus (
+  sku INTEGER PRIMARY KEY, ref INTEGER NOT NULL, name TEXT NOT NULL, title TEXT NOT NULL, price INTEGER NOT NULL,
+  msrp INTEGER, listed INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS cargo (
   key TEXT PRIMARY KEY, name TEXT NOT NULL, names TEXT NOT NULL, scu REAL, extra REAL, boxes TEXT NOT NULL, viewer TEXT
 );
@@ -50,8 +55,12 @@ def connect(path, check_same_thread=True):
     if cat and "mid" not in cat:  # older, smaller ship list: it's rebuilt from RSI on the next check
         db.executescript("DROP TABLE catalog; DELETE FROM state WHERE key='catalog_at';")
     db.executescript(SCHEMA)
-    if "guild_id" not in {r["name"] for r in db.execute("PRAGMA table_info(watches)")}:
+    wcols = {r["name"] for r in db.execute("PRAGMA table_info(watches)")}
+    if "guild_id" not in wcols:
         db.execute("ALTER TABLE watches ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''")
+    if "kind" not in wcols:  # 'name' (part of a ship name), 'above' (amount = cents) or 'from' (ref = upgrade ship id)
+        db.executescript("ALTER TABLE watches ADD COLUMN kind TEXT NOT NULL DEFAULT 'name';"
+                         "ALTER TABLE watches ADD COLUMN amount INTEGER; ALTER TABLE watches ADD COLUMN ref INTEGER;")
     if "weapons" not in {r["name"] for r in db.execute("PRAGMA table_info(ingame)")}:  # filled on the next refresh
         db.executescript("ALTER TABLE ingame ADD COLUMN weapons TEXT; DELETE FROM state WHERE key='ingame_at';")
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}

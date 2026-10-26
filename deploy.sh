@@ -2,23 +2,29 @@
 # Build on the server and swap in the new version without a gap: a temporary copy starts on the same port
 # (SO_REUSEPORT, host network) and serves the site while the main container is recreated, then it's removed.
 # Only one copy at a time runs the store checks and bots (a lock in the data folder).
-# Settings in deploy.env next to this script (not committed):
+# Settings in deploy.env next to this script (not committed), or the file named by DEPLOY_ENV (e.g. deploy.dev.env):
 #   HOST        ssh host
 #   COMPOSE_DIR folder with a compose.yaml that has a `pledgewatch` service (network_mode: host)
 #   DATA_DIR    the data folder mounted at /data
 #   ENV_FILE    the settings file the service uses
 #   REMOTE_DIR  where the source goes (default pledgewatch)
+#   SERVICE     compose service to replace (default pledgewatch). Any other name (a staging copy) is simply recreated
+#               from the image pledgewatch:TAG, with no gapless swap
+#   TAG         image tag (default latest)
 set -euo pipefail
 cd "$(dirname "$0")"
-[ -f deploy.env ] && . ./deploy.env
+ENV=${DEPLOY_ENV:-deploy.env}
+[ -f "$ENV" ] && . "./$ENV"
 : "${HOST:?set HOST}" "${COMPOSE_DIR:?set COMPOSE_DIR}" "${DATA_DIR:?set DATA_DIR}" "${ENV_FILE:?set ENV_FILE}"
 REMOTE_DIR=${REMOTE_DIR:-pledgewatch}
+SERVICE=${SERVICE:-pledgewatch}
+TAG=${TAG:-latest}
 rsync -a --delete --exclude .venv --exclude .git --exclude /data --exclude __pycache__ --exclude .pytest_cache \
   --exclude node_modules --exclude web/dist --exclude 'deploy*.env' ./ "$HOST:$REMOTE_DIR/"
-ssh "$HOST" REMOTE_DIR="$REMOTE_DIR" COMPOSE_DIR="$COMPOSE_DIR" DATA_DIR="$DATA_DIR" ENV_FILE="$ENV_FILE" bash -s <<'REMOTE'
+ssh "$HOST" REMOTE_DIR="$REMOTE_DIR" SERVICE="$SERVICE" TAG="$TAG" COMPOSE_DIR="$COMPOSE_DIR" DATA_DIR="$DATA_DIR" ENV_FILE="$ENV_FILE" bash -s <<'REMOTE'
 set -euo pipefail
 cd "$REMOTE_DIR"
-docker build -q -t pledgewatch:latest . >/dev/null
+docker build -q -t "pledgewatch:$TAG" . >/dev/null
 
 wait_for_site() {  # container name: wait until it logs that the website is up
   for _ in $(seq 1 60); do
@@ -27,6 +33,13 @@ wait_for_site() {  # container name: wait until it logs that the website is up
   done
   echo "$1 didn't start its website in 60 s" >&2; docker logs --tail 20 "$1" >&2; return 1
 }
+
+if [ "$SERVICE" != pledgewatch ]; then
+  docker compose --project-directory "$COMPOSE_DIR" up -d --no-deps --force-recreate "$SERVICE" 2>&1 | tail -1
+  wait_for_site "$SERVICE"
+  echo "$SERVICE is up"
+  exit 0
+fi
 
 docker rm -f pledgewatch-next >/dev/null 2>&1 || true
 docker run -d --name pledgewatch-next --network host --user 1000:1000 --memory 128m \

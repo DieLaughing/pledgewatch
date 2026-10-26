@@ -98,3 +98,29 @@ def test_site_shows_upgrades_and_values(tmp_path):
     assert [(u["label"], u["price"]) for u in by["Carrack"]["upgrades"]] == [("BIS Warbond", 56000), ("Standard", 60000)]
     assert by["M2 Hercules Starlifter"]["ccu"]["value"] == 52000 and "upgrades" not in by["M2 Hercules Starlifter"]
     assert site.upgrade_label("Aegis Reclaimer Best in Show Edition Upgrade") == "Best in Show"
+
+
+def test_map_paths_keeps_ships_that_failed_and_drops_bad_runs(tmp_path, monkeypatch):
+    from pw import site
+    monkeypatch.setattr(upgrades, "MAP_PAUSE", 0)
+    db = store_db.connect(str(tmp_path / "t.db"))
+    upgrades.check(db, ships((CARRACK, {"id": 4, "title": "Warbond Edition", "price": 57000})), now=1)
+    assert upgrades.map_paths(db, {M2: {1: 8000, 4: 5000}, CARRACK: {2: 37500}, POLARIS: {}}.get, now=2) == 3
+
+    def flaky(ref):
+        if ref == M2:
+            raise upgrades.StoreError("timeout")
+        return {CARRACK: {2: 37000}, POLARIS: {}}[ref]
+    monkeypatch.setattr(upgrades, "MAP_MIN_SHARE", 0.5)
+    assert upgrades.map_paths(db, flaky, now=3) == 2
+    p = site.plan(db)
+    assert p["at"] == 3 and p["paths"] == {str(M2): [[4, 5000], [1, 8000]], str(CARRACK): [[2, 37000]]}
+    assert p["skus"][4] == [CARRACK, "Warbond", 57000] and [M2, "M2 Hercules Starlifter", 52000] in p["ships"]
+
+    monkeypatch.setattr(upgrades, "MAP_MIN_SHARE", 0.9)
+    assert upgrades.map_paths(db, flaky, now=4) == 0  # 2 of 3 answered: the map stays as it was
+    assert site.plan(db)["at"] == 3
+
+    # An upgrade that has left the store since the map run isn't offered.
+    upgrades.check(db, ships(), now=5)
+    assert site.plan(db)["paths"][str(M2)] == [[1, 8000]]

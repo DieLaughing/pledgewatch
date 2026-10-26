@@ -5,6 +5,8 @@ after the store page hands out its guest Rsi-Token, two calls set up a guest upg
 - `ships` lists every ship with the upgrade editions on sale now (standard, warbond, ...) and their target prices, and
 - `to(from: ship)` lists exactly what one ship can upgrade into, with what each upgrade costs from it. Warbond
   editions often only apply from some ships, so the cost comes from here, not from subtracting prices.
+
+Every few hours `map_paths` asks `to(from)` for every ship, which gives the upgrade planner its map.
 """
 import json
 import logging
@@ -20,6 +22,12 @@ API = BASE + "/pledge-store/api/upgrade/graphql"
 PAGE = BASE + "/en/account/pledges"  # My Hangar: RSI's Ship Upgrade tool opens from here (logged in)
 # If a check finds far fewer upgrade editions than we have listed, treat it as a bad read.
 MIN_SHARE = 0.5
+MAP_EVERY = 3 * 3600  # seconds between planner map runs
+MAP_PAUSE = 0.5  # seconds between ships, so a run is a slow trickle (about 3 minutes for 240 ships)
+MAP_RETRY = 1800  # after a failed run
+# A run that hears back about fewer ships than this is dropped; the previous map stays.
+MAP_MIN_SHARE = 0.9
+SESSION_TTL = 1200  # RSI's guest upgrade session lasts 30 minutes
 
 SHIPS = """query initShipUpgrade { ships { id name msrp medias { productThumbMediumAndSmall }
   skus { id title price available } } }"""
@@ -133,3 +141,66 @@ def _costs(sess, refs):
             log.warning("upgrade costs from ship %s failed: %s", ref, e)
         time.sleep(1)
     return out
+
+
+def map_paths(db, fetch=None, now=None):
+    """Ask RSI what every ship can upgrade into and what each upgrade costs from it, and save that as the planner's
+    map. Returns how many ships answered. Ships that didn't answer keep what the last run found; a run where too many
+    didn't is dropped. `fetch` (ship id -> {sku: cost}) is for tests."""
+    refs = [r[0] for r in db.execute("SELECT id FROM upgrade_ships ORDER BY id")]
+    if not refs:
+        return 0
+    fetch = fetch or _fetcher()
+    found = {}
+    for ref in refs:
+        try:
+            found[ref] = fetch(ref)
+        except (StoreError, OSError, ValueError, KeyError) as e:
+            log.warning("upgrade map: ship %s failed: %s", ref, e)
+    if len(found) < len(refs) * MAP_MIN_SHARE:
+        log.warning("upgrade map: only %d of %d ships answered; kept the previous map", len(found), len(refs))
+        return 0
+    with db:
+        db.executemany("DELETE FROM upgrade_paths WHERE from_ref=?", [(r,) for r in found])
+        db.executemany("INSERT INTO upgrade_paths (from_ref, sku, cost) VALUES (?,?,?)",
+                       [(r, sku, cost) for r, c in found.items() for sku, cost in c.items()])
+    store_db.set_state(db, "paths_at", int(now or time.time()))
+    log.info("upgrade map: %d ships, %d upgrades", len(found), sum(len(c) for c in found.values()))
+    return len(found)
+
+
+def _fetcher():
+    """One guest session for the whole run, renewed when it's old or after an error."""
+    sess = {"s": None, "at": 0}
+
+    def fetch(ref):
+        time.sleep(MAP_PAUSE)
+        if not sess["s"] or time.time() - sess["at"] > SESSION_TTL:
+            sess["s"], sess["at"] = Session(), time.time()
+        try:
+            return sess["s"].costs(ref)
+        except (StoreError, OSError, ValueError, KeyError):
+            sess["s"] = None
+            raise
+    return fetch
+
+
+async def map_loop(path, after=None):
+    """Run map_paths every MAP_EVERY seconds, counted from the last good run, so restarts don't trigger extra runs.
+    Like the upgrade check, nothing that goes wrong here can stop the store checks, bots or website."""
+    import asyncio
+    db = store_db.connect(path, check_same_thread=False)  # only ever used by this loop, one step at a time
+    while True:
+        wait = (store_db.get_state(db, "paths_at", 0) or 0) + MAP_EVERY - time.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+            continue
+        try:
+            ok = await asyncio.to_thread(map_paths, db)
+        except Exception:
+            log.exception("upgrade map crashed")
+            ok = 0
+        if ok and after:
+            after()
+        if not ok:
+            await asyncio.sleep(MAP_RETRY)

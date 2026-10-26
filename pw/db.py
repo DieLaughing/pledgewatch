@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS upgrade_skus (
   sku INTEGER PRIMARY KEY, ref INTEGER NOT NULL, name TEXT NOT NULL, title TEXT NOT NULL, price INTEGER NOT NULL,
   msrp INTEGER, listed INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL
 );
+-- The planner's map: what each ship (from_ref) can upgrade into right now (sku) and what it costs from it.
+CREATE TABLE IF NOT EXISTS upgrade_paths (
+  from_ref INTEGER NOT NULL, sku INTEGER NOT NULL, cost INTEGER NOT NULL, PRIMARY KEY (from_ref, sku)
+);
 CREATE TABLE IF NOT EXISTS cargo (
   key TEXT PRIMARY KEY, name TEXT NOT NULL, names TEXT NOT NULL, scu REAL, extra REAL, boxes TEXT NOT NULL, viewer TEXT
 );

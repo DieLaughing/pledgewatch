@@ -17,6 +17,9 @@ ENTRIES = [
         "Clearer upgrades: each card shows the ship's upgrade value with a ? that explains it, a \"What would I pay?\" "
         "shortcut, and a link to your RSI hangar, where upgrades are actually bought.",
         "This What's new page.",
+        "Upgrade planner (Upgrade planner, top right): pick the ship you own and the one you want, and it finds the "
+        "cheapest chain of upgrades on sale right now, with what each step costs and which ones need new money. Add "
+        "upgrades you already have and routes can use them as free steps. Each card's upgrade line links to it.",
     ]),
     ("2026-10-25", [
         "Pledge Watch launched: every ship in the public RSI store, every edition side by side (standard, warbond, "
@@ -29,7 +32,8 @@ ENTRIES = [
     ]),
 ]
 
-NEWEST = ENTRIES[0][0]
+# The date plus how many items it has, so adding to today's entry shows the dot again: "2026-10-26" < "2026-10-26#8".
+NEWEST = f"{ENTRIES[0][0]}#{len(ENTRIES[0][1])}"
 
 
 def _date(d):

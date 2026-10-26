@@ -129,6 +129,22 @@ def build(db, now=None):
             else None, "builtAt": now}
 
 
+def plan(db):
+    """The upgrade planner's map, kept small: every ship RSI's upgrade tool knows ([id, name, value]), the upgrade
+    editions on sale ({sku: [ship id, label, upgrade value]}), and what each ship can upgrade into from the last
+    map run ({from id: [[sku, cost], ...]}). Upgrades that have left the store since that run are dropped."""
+    ships = [[r["id"], r["name"], r["msrp"]] for r in db.execute("SELECT id, name, msrp FROM upgrade_ships ORDER BY id")
+             if r["msrp"]]
+    skus = {r["sku"]: [r["ref"], upgrade_label(r["title"]), r["price"]]
+            for r in db.execute("SELECT sku, ref, title, price FROM upgrade_skus WHERE listed=1 ORDER BY sku")}
+    paths = {}
+    for r in db.execute("SELECT from_ref, sku, cost FROM upgrade_paths ORDER BY from_ref, cost"):
+        if r["sku"] in skus:
+            paths.setdefault(str(r["from_ref"]), []).append([r["sku"], r["cost"]])
+    at = db.execute("SELECT value FROM state WHERE key='paths_at'").fetchone()
+    return {"at": json.loads(at[0]) if at else None, "ships": ships, "skus": skus, "paths": paths}
+
+
 def _game(g):
     """In-game prices, insurance and store history for one ship, trimmed for the page."""
     buy, rent = json.loads(g["buy"]), json.loads(g["rent"])
@@ -176,8 +192,9 @@ analytics on this website.</p>
 <h2>The website</h2>
 <p>Pages are served through Cloudflare, which sees visitors' IP addresses to deliver and protect the site, as any
 Cloudflare site does. Pledge Watch itself keeps no visitor logs. Your "aUEC an hour" figure is stored only in your own
-browser. When you pick a ship under "Upgrade from", the site asks RSI's public upgrade tool what that ship can upgrade
-into; RSI sees Pledge Watch's request, never yours, and nothing about you is sent or kept.</p>
+browser. When you pick a ship under "I own", the site asks RSI's public upgrade tool what that ship can upgrade
+into; RSI sees Pledge Watch's request, never yours, and nothing about you is sent or kept. Upgrades you list on the
+upgrade planner as ones you already have are stored only in your own browser too.</p>
 <h2>The Discord and Fluxer bot</h2>
 <p>It stores only what it needs to work:</p>
 <ul>
@@ -243,6 +260,8 @@ class Site:
         self.page = self.page_gz = self.api = self.api_gz = b""
         self.images = {}
         self.etag = ""
+        self.plan = self.plan_gz = b""
+        self.plan_etag = ""
         self.costs = {}  # upgrade ship id -> (fetched at, {sku: cost})
         self.costs_lock = asyncio.Lock()
         self.upgrade_session = None  # (made at, upgrades.Session)
@@ -268,13 +287,17 @@ class Site:
         self.page, self.api = html.encode(), blob.encode()
         self.page_gz, self.api_gz = gzip.compress(self.page, 9), gzip.compress(self.api, 9)
         self.etag = '"' + hashlib.sha1(self.page).hexdigest()[:16] + '"'
+        self.plan = json.dumps(plan(self.db), separators=(",", ":")).encode()
+        self.plan_gz = gzip.compress(self.plan, 9)
+        self.plan_etag = '"' + hashlib.sha1(self.plan).hexdigest()[:16] + '"'
 
-    def _send(self, request, body, gz, ctype):
-        if request.headers.get("If-None-Match") == self.etag:
-            return web.Response(status=304, headers={"ETag": self.etag})
+    def _send(self, request, body, gz, ctype, etag=None):
+        etag = etag or self.etag
+        if request.headers.get("If-None-Match") == etag:
+            return web.Response(status=304, headers={"ETag": etag})
         headers = {"Content-Type": ctype,
                    "Cache-Control": "public, max-age=60, stale-while-revalidate=600, stale-if-error=86400",
-                   "ETag": self.etag, "Vary": "Accept-Encoding"}
+                   "ETag": etag, "Vary": "Accept-Encoding"}
         if "gzip" in request.headers.get("Accept-Encoding", ""):
             headers["Content-Encoding"] = "gzip"
             body = gz
@@ -285,6 +308,9 @@ class Site:
 
     async def ships_json(self, request):
         return self._send(request, self.api, self.api_gz, "application/json")
+
+    async def plan_json(self, request):
+        return self._send(request, self.plan, self.plan_gz, "application/json", self.plan_etag)
 
     async def image(self, request):
         img = request.match_info["id"]
@@ -350,6 +376,8 @@ class Site:
     def app(self):
         app = web.Application()
         app.router.add_get("/", self.index)
+        app.router.add_get("/plan", self.index)  # the same page; it shows the planner at this address
+        app.router.add_get("/plan.json", self.plan_json)
         app.router.add_get("/ships.json", self.ships_json)
         app.router.add_get("/img/{id:[0-9a-f]{16}}.jpg", self.image)
         app.router.add_get("/upgrades/{ref:[0-9]{1,6}}.json", self.upgrade_costs)

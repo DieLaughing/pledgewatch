@@ -7,7 +7,7 @@ import os
 import sys
 
 from . import db as store_db
-from . import servers
+from . import servers, upgrades
 from .post import apps_from_env
 from .watcher import check, run
 
@@ -56,7 +56,7 @@ async def main():
         await serve(site, int(env.get("PW_PORT", "8794")), env.get("PW_HOST", "0.0.0.0"))
         after = site.refresh
     await lead(site)
-    tasks = [run(path, apps, after)]
+    tasks = [run(path, apps, after), upgrades.map_loop(path, after)]
     if env.get("DISCORD_TOKEN") and env.get("DISCORD_GUILD_ID"):
         from .bots import discord_client
         poster = next(a for a in apps if a.name == "discord")

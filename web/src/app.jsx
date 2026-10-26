@@ -40,7 +40,7 @@ const SORTS = {
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
 const RATE_KEY = "pw-rate";
-const CCU_TOOL = "https://robertsspaceindustries.com/en/account/pledges";  // My Hangar, where RSI's Ship Upgrade tool opens
+export const CCU_TOOL = "https://robertsspaceindustries.com/en/account/pledges";  // My Hangar, where RSI's Ship Upgrade tool opens
 const SEEN_KEY = "pw-seen";  // newest What's new date this browser has opened
 function savedRate() {
   try { return Number(localStorage.getItem(RATE_KEY)) || 500000; } catch { return 500000; }
@@ -51,14 +51,15 @@ const KIND = {
   status: ["Flight status", "info"], loaners: ["Loaners", "info"],
 };
 
-const money = (c) => (c == null ? "" : "$" + (c / 100).toLocaleString("en-US", { maximumFractionDigits: c % 100 ? 2 : 0 }));
+export const money = (c) => (c == null ? "" : "$" + (c / 100).toLocaleString("en-US", { maximumFractionDigits: c % 100 ? 2 : 0 }));
 const price = (s) => {
   const v = Math.min(...s.editions.filter((e) => e.inStore).map((e) => e.price ?? Infinity));
   return Number.isFinite(v) ? v : 0;
 };
 const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const planLink = (to, from) => `/plan?${from ? `from=${norm(from).replace(/ /g, "-")}&` : ""}to=${norm(to).replace(/ /g, "-")}`;
 
-function ago(ts, now) {
+export function ago(ts, now) {
   const s = Math.max(0, now - ts);
   if (s < 90) return "just now";
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
@@ -201,10 +202,11 @@ export function App({ data: first }) {
         </a>
         <p class="checked">
           <span class="dot" aria-hidden="true" />
-          Public RSI store{data.checkedAt ? `, checked ${ago(data.checkedAt, now)}` : ""}
+          <span class="when">Public RSI store{data.checkedAt ? `, checked ${ago(data.checkedAt, now)}` : ""}</span>
           <a class="news" href="/whats-new" onClick={markSeen}>
             What's new{data.newest && seen < data.newest ? <span class="nd" aria-label="(new)" /> : null}
           </a>
+          <a class="news" href="/plan">Upgrade planner</a>
         </p>
       </header>
 
@@ -414,7 +416,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
           </p>
         ) : null}
       </div>
-      <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} pickShip={pickShip} />
+      <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} pickShip={pickShip} plan={s.ccu ? planLink(s.name, ctx.costs ? fromName : "") : ""} />
       {open ? <Details s={s} rate={rate} version={version} /> : null}
     </li>
   );
@@ -710,22 +712,24 @@ function Edition({ e, standard, upgrade }) {
 // The upgrades (CCUs) to this ship on sale now. An upgrade's price is the ship's value as an upgrade target: you pay it
 // minus the value of the ship you upgrade from. With a ship picked under "I own" and RSI's answer in, show exactly what
 // each upgrade that ship can take costs from it.
-function Upgrades({ s, from, fromName, costs, pickShip }) {
+function Upgrades({ s, from, fromName, costs, pickShip, plan }) {
   const [why, setWhy] = useState(false);
   const list = s.upgrades || [];
   if (!list.length || from === s.key) return null;
   const value = s.ccu?.value || 0;
   const tool = <a class="tool" href={CCU_TOOL} target="_blank" rel="noopener">Buy in your RSI hangar ↗</a>;
+  const route = plan ? <a class="tool" href={plan}>Plan a route</a> : null;
   if (from && costs) {
     const mine = list.filter((u) => u.sku in costs).sort((a, b) => costs[a.sku] - costs[b.sku]);
     if (!mine.length) {
-      return <p class="ccu muted">Upgrades to it are on sale ({list.map((u) => u.label).join(", ")}), but none apply from your {fromName}</p>;
+      return <p class="ccu muted">Upgrades to it are on sale ({list.map((u) => u.label).join(", ")}), but none apply from your {fromName}{route ? <> · {route}</> : null}</p>;
     }
     return (
       <p class="ccu">
         <span class="k">You pay from your {fromName}</span>
         {mine.map((u) => <span class={`u${u.price < value ? " deal" : ""}`}><b>{money(costs[u.sku])}</b> {u.label}</span>)}
         {tool}
+        {route}
       </p>
     );
   }
@@ -742,6 +746,7 @@ function Upgrades({ s, from, fromName, costs, pickShip }) {
         </span>
       ))}
       <button type="button" class="link mine" onClick={pickShip}>What would I pay?</button>
+      {route}
       {why ? (
         <p class="explain">
           An upgrade (CCU) turns a ship you already own into this one. You pay the upgrade value minus your ship's value:

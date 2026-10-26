@@ -18,6 +18,8 @@ that posts when ships come in, sell out, change price or leave.
 - **Price history:** past standard and warbond prices with dates, including the lowest and the last warbond.
 - **Upgrades (CCUs):** every upgrade on sale per ship (standard, warbond, Best in Show) and what it saves. Pick a ship
   you own and see exactly what it can upgrade into right now and what each costs, from RSI's own upgrade tool.
+- **Upgrade planner** (`/plan`): the cheapest chain of upgrades from a ship you own to the one you want, using the
+  upgrades on sale now and any you already have (kept in your browser only).
 - **Cargo grids** drawn from above, with every box labelled in SCU.
 - **Loaners** for ships that aren't flyable yet, and flight-status changes as they happen.
 - **A change log** of everything that came in, sold out, changed price or left.
@@ -82,7 +84,8 @@ while the main container is recreated, and a lock in the data folder lets only o
   `pw/watcher.py` runs that every 5 minutes and logs them in SQLite.
 - `pw/upgrades.py` reads the upgrade (CCU) store the same way, as a logged-out guest: every ship's upgrade editions
   and, for ships people watch with `from:`, exactly what each upgrade costs from them. Upgrade alerts are only posted
-  where someone asked for them.
+  where someone asked for them. Every few hours it also asks what every ship can upgrade into (a slow trickle, about
+  3 minutes), which is the planner's map; the route itself is worked out in the browser.
 - `pw/post.py` posts changes to every server that set up alerts; `pw/bots.py` answers commands on Discord and Fluxer.
 - `pw/catalog.py`, `pw/ingame.py` and `pw/cargo.py` refresh RSI's Ship Matrix and Loaner Ship Matrix, the Star Citizen
   Wiki, UEX and sc-cargo.space once a day.

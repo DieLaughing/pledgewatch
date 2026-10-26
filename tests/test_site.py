@@ -52,3 +52,17 @@ def test_whats_new_page_and_newest():
     assert dates == sorted(dates, reverse=True) and whatsnew.NEWEST.startswith(dates[0] + "#") and whatsnew.NEWEST > dates[0]
     page = whatsnew.page()
     assert "<code>/watch above:520</code>" in page and "October 26, 2026" in page
+
+
+def test_plan_page_carries_its_map_and_title(tmp_path):
+    import os
+    from pw.site import PLAN_DESCRIPTION, Site
+    dist = tmp_path / "dist"
+    os.makedirs(dist)
+    page = open(os.path.join(os.path.dirname(__file__), "..", "web", "index.html")).read()
+    (dist / "index.html").write_text(page)
+    site = Site(str(tmp_path / "t.db"), str(dist))
+    site.refresh()
+    html = site.plan_page.decode()
+    assert '<script id="plan" type="application/json">{"at":null' in html and 'id="data"' not in html
+    assert "<title>Upgrade planner · Pledge Watch</title>" in html and PLAN_DESCRIPTION in html

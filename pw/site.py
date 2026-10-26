@@ -131,16 +131,21 @@ def build(db, now=None):
 
 def plan(db):
     """The upgrade planner's map, kept small: every ship RSI's upgrade tool knows ([id, name, value]), the upgrade
-    editions on sale ({sku: [ship id, label, upgrade value]}), and what each ship can upgrade into from the last
-    map run ({from id: [[sku, cost], ...]}). Upgrades that have left the store since that run are dropped."""
+    editions on sale ({sku: [ship id, label, upgrade value]}), and what each ship can upgrade into ({from id:
+    [[sku, cost], ...]}). Which upgrades apply from which ship comes from the last map run; the cost is worked out
+    from the prices checked every few minutes (upgrade value minus the ship's value, which is exactly what RSI charges:
+    every one of 6,616 mapped costs matched it), so a price drop shows straight away. Upgrades that have left the store
+    since the map run are dropped."""
     ships = [[r["id"], r["name"], r["msrp"]] for r in db.execute("SELECT id, name, msrp FROM upgrade_ships ORDER BY id")
              if r["msrp"]]
     skus = {r["sku"]: [r["ref"], upgrade_label(r["title"]), r["price"]]
             for r in db.execute("SELECT sku, ref, title, price FROM upgrade_skus WHERE listed=1 ORDER BY sku")}
     paths = {}
-    for r in db.execute("SELECT from_ref, sku, cost FROM upgrade_paths ORDER BY from_ref, cost"):
-        if r["sku"] in skus:
-            paths.setdefault(str(r["from_ref"]), []).append([r["sku"], r["cost"]])
+    for r in db.execute("""SELECT p.from_ref, p.sku, k.price - f.msrp AS cost FROM upgrade_paths p
+                           JOIN upgrade_skus k ON k.sku = p.sku AND k.listed = 1
+                           JOIN upgrade_ships f ON f.id = p.from_ref
+                           WHERE k.price > f.msrp ORDER BY p.from_ref, cost"""):
+        paths.setdefault(str(r["from_ref"]), []).append([r["sku"], r["cost"]])
     at = db.execute("SELECT value FROM state WHERE key='paths_at'").fetchone()
     return {"at": json.loads(at[0]) if at else None, "ships": ships, "skus": skus, "paths": paths}
 
@@ -171,6 +176,11 @@ def _crew(lo, hi):
 def _img_id(url):
     return hashlib.sha1(url.encode()).hexdigest()[:16]
 
+
+PAGE_DESCRIPTION = ("Every Star Citizen ship in the public RSI pledge store, with standard, warbond and anniversary "
+                    "prices side by side.")
+PLAN_DESCRIPTION = ("Find the cheapest chain of Star Citizen ship upgrades (CCUs) from the ship you own to the one you "
+                    "want, using the upgrades on sale right now.")
 
 COSTS_TTL = 600  # seconds an answer from RSI's upgrade tool is reused
 SESSION_TTL = 1200  # RSI's guest upgrade session lasts 30 minutes
@@ -260,8 +270,8 @@ class Site:
         self.page = self.page_gz = self.api = self.api_gz = b""
         self.images = {}
         self.etag = ""
-        self.plan = self.plan_gz = b""
-        self.plan_etag = ""
+        self.plan = self.plan_gz = self.plan_page = self.plan_page_gz = b""
+        self.plan_etag = self.plan_page_etag = ""
         self.costs = {}  # upgrade ship id -> (fetched at, {sku: cost})
         self.costs_lock = asyncio.Lock()
         self.upgrade_session = None  # (made at, upgrades.Session)
@@ -287,9 +297,15 @@ class Site:
         self.page, self.api = html.encode(), blob.encode()
         self.page_gz, self.api_gz = gzip.compress(self.page, 9), gzip.compress(self.api, 9)
         self.etag = '"' + hashlib.sha1(self.page).hexdigest()[:16] + '"'
-        self.plan = json.dumps(plan(self.db), separators=(",", ":")).encode()
-        self.plan_gz = gzip.compress(self.plan, 9)
+        # The planner page carries only its map (~10 KB gzipped), not the ship list, so it's one small request.
+        blob = json.dumps(plan(self.db), separators=(",", ":")).replace("</", "<\\/")
+        self.plan = blob.encode()
+        self.plan_page = (template.replace("<!--DATA-->", f'<script id="plan" type="application/json">{blob}</script>')
+                          .replace("<title>Pledge Watch</title>", "<title>Upgrade planner · Pledge Watch</title>")
+                          .replace(PAGE_DESCRIPTION, PLAN_DESCRIPTION)).encode()
+        self.plan_gz, self.plan_page_gz = gzip.compress(self.plan, 9), gzip.compress(self.plan_page, 9)
         self.plan_etag = '"' + hashlib.sha1(self.plan).hexdigest()[:16] + '"'
+        self.plan_page_etag = '"' + hashlib.sha1(self.plan_page).hexdigest()[:16] + '"'
 
     def _send(self, request, body, gz, ctype, etag=None):
         etag = etag or self.etag
@@ -308,6 +324,9 @@ class Site:
 
     async def ships_json(self, request):
         return self._send(request, self.api, self.api_gz, "application/json")
+
+    async def plan_page_html(self, request):
+        return self._send(request, self.plan_page, self.plan_page_gz, "text/html; charset=utf-8", self.plan_page_etag)
 
     async def plan_json(self, request):
         return self._send(request, self.plan, self.plan_gz, "application/json", self.plan_etag)
@@ -376,7 +395,7 @@ class Site:
     def app(self):
         app = web.Application()
         app.router.add_get("/", self.index)
-        app.router.add_get("/plan", self.index)  # the same page; it shows the planner at this address
+        app.router.add_get("/plan", self.plan_page_html)  # the same app, showing the planner, with the map inline
         app.router.add_get("/plan.json", self.plan_json)
         app.router.add_get("/ships.json", self.ships_json)
         app.router.add_get("/img/{id:[0-9a-f]{16}}.jpg", self.image)

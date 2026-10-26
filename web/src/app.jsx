@@ -747,7 +747,7 @@ function Upgrades({ s, from, fromName, costs, pickShip, plan }) {
   if (!list.length || from === s.key) return null;
   const value = s.ccu?.value || 0;
   const tool = <a class="tool" href={CCU_TOOL} target="_blank" rel="noopener">Buy in your RSI hangar ↗</a>;
-  const route = plan ? <a class="tool" href={plan}>Plan a route</a> : null;
+  const route = plan ? <a class="link mine" href={plan}>Plan a route</a> : null;
   if (from && costs) {
     const mine = list.filter((u) => u.sku in costs).sort((a, b) => costs[a.sku] - costs[b.sku]);
     if (!mine.length) {

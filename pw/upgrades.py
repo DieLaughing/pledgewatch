@@ -25,6 +25,8 @@ MIN_SHARE = 0.5
 MAP_EVERY = 3 * 3600  # seconds between planner map runs
 MAP_PAUSE = 0.5  # seconds between ships, so a run is a slow trickle (about 3 minutes for 240 ships)
 MAP_RETRY = 1800  # after a failed run
+MAP_SOON = 1800  # when upgrades come in or come back (a sale starting), the next run is at most this long after the last
+MAP_POLL = 300  # how often the loop looks for that
 # A run that hears back about fewer ships than this is dropped; the previous map stays.
 MAP_MIN_SHARE = 0.9
 SESSION_TTL = 1200  # RSI's guest upgrade session lasts 30 minutes
@@ -108,6 +110,8 @@ def check(db, ships=None, costs=None, now=None):
             events.append({**e, "was": old["price"]})
     if not known:
         events = []  # the first look is the baseline
+    if any("was" not in e for e in events):  # new or back, not just cheaper
+        store_db.set_state(db, "upgrades_new_at", now)  # the planner's map should learn what they apply from soon
 
     refs = [r[0] for r in db.execute("SELECT DISTINCT ref FROM watches WHERE kind='from'")]
     if events and refs:
@@ -186,14 +190,18 @@ def _fetcher():
 
 
 async def map_loop(path, after=None):
-    """Run map_paths every MAP_EVERY seconds, counted from the last good run, so restarts don't trigger extra runs.
-    Like the upgrade check, nothing that goes wrong here can stop the store checks, bots or website."""
+    """Run map_paths every MAP_EVERY seconds, counted from the last good run, so restarts don't trigger extra runs, and
+    sooner (MAP_SOON after the last run) once new upgrades come in. Like the upgrade check, nothing that goes wrong here
+    can stop the store checks, bots or website."""
     import asyncio
     db = store_db.connect(path, check_same_thread=False)  # only ever used by this loop, one step at a time
     while True:
-        wait = (store_db.get_state(db, "paths_at", 0) or 0) + MAP_EVERY - time.time()
-        if wait > 0:
-            await asyncio.sleep(wait)
+        last = store_db.get_state(db, "paths_at", 0) or 0
+        due = last + MAP_EVERY
+        if (store_db.get_state(db, "upgrades_new_at", 0) or 0) > last:
+            due = min(due, last + MAP_SOON)
+        if due > time.time():
+            await asyncio.sleep(min(due - time.time(), MAP_POLL))
             continue
         try:
             ok = await asyncio.to_thread(map_paths, db)

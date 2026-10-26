@@ -4,7 +4,7 @@ import { CCU_TOOL, ago, money } from "./app.jsx";
 // The upgrade (CCU) planner: the cheapest way from a ship you own to the one you want, chaining upgrades on sale now
 // and ones you already have. If every step were at full price a chain would cost the same as the full difference, so
 // what a route saves is the discounts on its steps. The map comes from RSI's upgrade tool every few hours
-// (/plan.json); the route is worked out here, so changing ships never waits on the server.
+// (in the page, or /plan.json); the route is worked out here, so changing ships never waits on the server.
 
 const OWNED_KEY = "pw-owned";  // upgrades you already have: [[from ship id, to ship id], ...], only in this browser
 const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -18,15 +18,16 @@ function loadOwned() {
   } catch { return []; }
 }
 
-export function Plan({ data }) {
-  const [map, setMap] = useState(null);
+// `map` comes with the page; without it (`npm run dev`) it's fetched.
+export function Plan({ map: inline }) {
+  const [map, setMap] = useState(inline);
   const [failed, setFailed] = useState(false);
   const [tries, setTries] = useState(0);
   useEffect(() => {
+    if (map) return;
     setFailed(false);
     fetch("/plan.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(setMap).catch(() => setFailed(true));
   }, [tries]);
-  useEffect(() => { document.title = "Upgrade planner · Pledge Watch"; }, []);
   const now = Math.floor(Date.now() / 1000);
   return (
     <div class="page planner">

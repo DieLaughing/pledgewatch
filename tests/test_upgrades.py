@@ -114,7 +114,8 @@ def test_map_paths_keeps_ships_that_failed_and_drops_bad_runs(tmp_path, monkeypa
     monkeypatch.setattr(upgrades, "MAP_MIN_SHARE", 0.5)
     assert upgrades.map_paths(db, flaky, now=3) == 2
     p = site.plan(db)
-    assert p["at"] == 3 and p["paths"] == {str(M2): [[4, 5000], [1, 8000]], str(CARRACK): [[2, 37000]]}
+    # Costs are worked out from today's prices (upgrade value minus the ship's), not the ones the map run saw.
+    assert p["at"] == 3 and p["paths"] == {str(M2): [[4, 5000], [1, 8000]], str(CARRACK): [[2, 37500]]}
     assert p["skus"][4] == [CARRACK, "Warbond", 57000] and [M2, "M2 Hercules Starlifter", 52000] in p["ships"]
 
     monkeypatch.setattr(upgrades, "MAP_MIN_SHARE", 0.9)
@@ -124,3 +125,11 @@ def test_map_paths_keeps_ships_that_failed_and_drops_bad_runs(tmp_path, monkeypa
     # An upgrade that has left the store since the map run isn't offered.
     upgrades.check(db, ships(), now=5)
     assert site.plan(db)["paths"][str(M2)] == [[1, 8000]]
+
+    # A price drop shows straight away; a new upgrade asks for a map run soon.
+    assert store_db.get_state(db, "upgrades_new_at") is None
+    upgrades.check(db, ships((CARRACK, {"id": 4, "title": "Warbond Edition", "price": 55000})), now=6)
+    assert site.plan(db)["paths"][str(M2)] == [[4, 3000], [1, 8000]]  # back, cheaper, and the M2 can still take it
+    assert store_db.get_state(db, "upgrades_new_at") == 6
+    upgrades.check(db, ships((CARRACK, {"id": 4, "title": "Warbond Edition", "price": 54000})), now=7)
+    assert store_db.get_state(db, "upgrades_new_at") == 6

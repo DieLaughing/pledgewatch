@@ -385,7 +385,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
   // A rough upgrade cost (target's standard price minus yours) only until RSI's real answer is in.
   const upgrade = ctx.estimate && from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
   const buy = low(s.buy), rent = low(s.rent);
-  const sold = SOLD[s.sold];
+  const sold = SOLD[s.sold], perDollar = byValue ? value(s) : 0;
   return (
     <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
       {s.img ? <img src={s.img} alt="" width="160" height="90" loading="lazy" decoding="async" /> : <div class="noimg" />}
@@ -418,7 +418,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
           <div class="ed ed-game" title="Lowest in-game buy price">
             <span class="label">In game</span>
             <span class="price">{auec(buy)}</span>
-            <span class="ins">{byValue && value(s) ? `${Math.round(value(s)).toLocaleString("en-US")} aUEC per $` : `≈ ${hours(buy / rate)} of play`}</span>
+            <span class="ins">{perDollar ? `${Math.round(perDollar).toLocaleString("en-US")} aUEC per $` : `≈ ${hours(buy / rate)} of play`}</span>
           </div>
         ) : rent ? (
           <div class="ed ed-game" title="Lowest in-game rental">
@@ -499,7 +499,7 @@ function Details({ s, rate, version }) {
           <dl class="facts">
             <dt>Buy</dt><dd><b>{auec(buy)}</b> at {s.buy.find((x) => x[0] === buy)[1]}</dd>
             <dt>Your time</dt><dd>about <b>{hours(buy / rate)}</b> at {auec(rate)} an hour</dd>
-            {dollars ? <><dt>Value</dt><dd>{Math.round(buy / dollars).toLocaleString("en-US")} aUEC per pledge dollar (${dollars.toLocaleString("en-US")})</dd></> : null}
+            {dollars ? <><dt>Value</dt><dd>{Math.round(value(s)).toLocaleString("en-US")} aUEC per pledge dollar (${dollars.toLocaleString("en-US")})</dd></> : null}
             {rent ? <Rent list={s.rent} /> : null}
           </dl>
         ) : rent ? (

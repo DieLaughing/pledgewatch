@@ -152,25 +152,22 @@ def lookup(db):
     """{ship name: patch}, filling gaps from the ship a variant is named after ('Carrack w/C8X' -> Carrack,
     'Mustang Alpha Vindicator' -> Mustang Alpha): the longest known name whose words all appear in it."""
     have = {r[0]: r[1] for r in db.execute("SELECT name, patch FROM released")}
-    words = {n: set(norm(n).split()) for n in have}
-    out = dict(have)
-    for (name,) in db.execute("SELECT name FROM catalog WHERE status='flight-ready'"):
-        if name in out:
-            continue
-        mine = set(norm(name).split())
-        base = [n for n, w in words.items() if w and w <= mine]
-        if base:
-            out[name] = have[max(base, key=lambda n: len(words[n]))]
-    return out
+    return _fill_variants(have, [r[0] for r in db.execute("SELECT name FROM catalog WHERE status='flight-ready'")])
 
 
 def availability(db):
-    """{ship name: 'always' | 'time' | 'quantity'}, with variants that have no page of their own taking the value of
-    the ship they're named after, as in lookup()."""
+    """{ship name: 'always' | 'time' | 'quantity' | 'retiring'}, variants without a page of their own filled in as in
+    lookup()."""
     have = {r[0]: r[1] for r in db.execute("SELECT name, kind FROM availability")}
+    return _fill_variants(have, [r[0] for r in db.execute("SELECT name FROM catalog")])
+
+
+def _fill_variants(have, names):
+    """`have` plus each of `names` missing from it, taking the value of the longest name in `have` whose words all
+    appear in it."""
     words = {n: set(norm(n).split()) for n in have}
     out = dict(have)
-    for (name,) in db.execute("SELECT name FROM catalog"):
+    for name in names:
         if name in out:
             continue
         mine = set(norm(name).split())

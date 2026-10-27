@@ -147,10 +147,10 @@ html:has(.sheet[open]) { overflow: hidden; }
 .tag { font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
 .tag.concept { color: var(--info); background: var(--info-bg); }
 .tag.gold { color: var(--wb); background: var(--wb-bg); }
+.tag.goldwip { color: var(--muted); background: var(--sunk); }
 .tag.sold { color: var(--muted); border: 1px dashed currentColor; padding: 0 5px; cursor: help; }
 .sheet .note { margin: 0; font-size: 12px; }
-.sold-note { margin: 0 0 8px; }
-.tag.goldwip { color: var(--muted); background: var(--sunk); }
+.details .sold-note { margin: 0 0 8px; }
 .arms { margin: 4px 0 0; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .gold-note { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
 .gold-note.done { color: var(--wb); }

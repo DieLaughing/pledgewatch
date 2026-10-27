@@ -4,11 +4,11 @@ import html
 
 ENTRIES = [
     ("2026-10-27", [
-        "New sort: Value, most aUEC per $ (in-game price divided by pledge price). While it's on, each card's In game box shows that figure instead "
-        "of hours of play.",
-        "Ships RSI only sells during sales or in limited runs get a Sale only or Limited runs tag (and ships on their way out a Retiring tag), and Filters has a new "
-        "How it's sold group (Always in store, Sale only). This comes from the Star Citizen Wiki, not RSI, so treat it as "
-        "a good guess.",
+        "New sort: Value, most aUEC per $ (in-game price divided by pledge price). While it's on, each card's In game "
+        "box shows that figure instead of hours of play.",
+        "Ships RSI only sells during sales or in limited runs get a Sale only or Limited runs tag (ships on their way "
+        "out get Retiring), and Filters has a new How it's sold group (Always in store, Sale only). This comes from the "
+        "Star Citizen Wiki, not RSI, so treat it as a good guess.",
         "The Limited filter is now called Limited stock, to tell it apart from sale-only ships.",
     ]),
     ("2026-10-26", [

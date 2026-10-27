@@ -21,6 +21,7 @@ const GROUPS = [["editions", "Editions"], ["sold", "How it's sold"], ["upgrades"
 const SOLD = {
   time: ["Sale only", "Sold only during limited-time sales"],
   quantity: ["Limited runs", "Sold only in limited-quantity sales"],
+  retiring: ["Retiring", "Being retired from the store"],
 };
 const WIKI_GUESS = "according to the Star Citizen Wiki, which players keep from past sales. RSI doesn't confirm it, so it can be wrong or out of date";
 // Upgrade filters also look at ships you can only get by upgrading right now, not as a standalone ship.

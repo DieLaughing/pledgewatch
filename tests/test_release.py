@@ -58,6 +58,7 @@ def test_availability_values():
     assert availability_of("| pledgeavailability = Always available\n") == "always"
     assert availability_of("| pledgeavailability              = Time-limited sales\n") == "time"
     assert availability_of("| pledgeavailability = Quantity-limited sales\n") == "quantity"
+    assert availability_of("| pledgeavailability = [https://robertsspaceindustries.com/x-Celebration Retiring]\n") == "retiring"
     assert availability_of("| pledgeavailability = \n") == "" and availability_of("no box") == ""
 
 

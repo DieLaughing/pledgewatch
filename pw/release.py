@@ -3,7 +3,7 @@
 Refreshed once a day, 50 pages per request.
 
 Also how RSI sells each ship (infobox field `pledgeavailability`): always in the store, only during time-limited
-sales, or in quantity-limited runs. RSI doesn't publish this; the wiki's editors keep it from past sales.
+sales, in quantity-limited runs, or being retired. RSI doesn't publish this; the wiki's editors keep it from past sales.
 
 Also which ships have had a "gold standard" pass (reworked to every vehicle feature the game has so far), from the
 table on the wiki's Vehicle Pipeline page. CIG doesn't publish a list; the wiki keeps this one by hand.
@@ -47,11 +47,11 @@ def patch_of(wikitext):
 
 
 def availability_of(wikitext):
-    """'Always available' -> 'always', 'Time-limited sales' -> 'time', 'Quantity-limited sales' -> 'quantity'; blank or
-    anything else -> ''."""
+    """'Always available' -> 'always', 'Time-limited sales' -> 'time', 'Quantity-limited sales' -> 'quantity',
+    '[<comm-link> Retiring]' -> 'retiring'; blank or anything else -> ''."""
     m = AVAIL.search(wikitext or "")
     value = m.group(1).lower() if m else ""
-    for word, kind in (("always", "always"), ("time", "time"), ("quantity", "quantity")):
+    for word, kind in (("always", "always"), ("time", "time"), ("quantity", "quantity"), ("retiring", "retiring")):
         if word in value:
             return kind
     return ""

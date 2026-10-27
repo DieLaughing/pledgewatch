@@ -44,7 +44,7 @@ const SORTS = {
   size: ["Size, largest first", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
   game: ["In-game price, low to high", (a, b) => (low(a.buy) || 1e15) - (low(b.buy) || 1e15)],
   "game-desc": ["In-game price, high to low", (a, b) => (low(b.buy) || -1) - (low(a.buy) || -1)],
-  value: ["Value, most aUEC per pledge dollar", (a, b) => value(b) - value(a)],
+  value: ["Value, most aUEC per $", (a, b) => value(b) - value(a)],
   pilot: ["Pilot firepower, high to low", (a, b) => (b.weapons?.pilot[0] ?? -1) - (a.weapons?.pilot[0] ?? -1)],
 };
 // In-game buy price per pledge dollar: the lowest price in the store now, else the last price the wiki saw. 0 = unknown.

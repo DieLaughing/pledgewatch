@@ -2,6 +2,9 @@
 (infobox field `addedinversion`, e.g. "Alpha 4.8.0"). Concept ships carry placeholders ("Alpha 4.x.x") and get none.
 Refreshed once a day, 50 pages per request.
 
+Also how RSI sells each ship (infobox field `pledgeavailability`): always in the store, only during time-limited
+sales, or in quantity-limited runs. RSI doesn't publish this; the wiki's editors keep it from past sales.
+
 Also which ships have had a "gold standard" pass (reworked to every vehicle feature the game has so far), from the
 table on the wiki's Vehicle Pipeline page. CIG doesn't publish a list; the wiki keeps this one by hand.
 """
@@ -22,6 +25,7 @@ API = ("https://starcitizen.tools/api.php?action=query&prop=revisions&rvprop=con
 PIPELINE = "Vehicle_Pipeline"
 REFRESH = 86400
 FIELD = re.compile(r"^\|\s*addedinversion\s*=\s*(.*?)\s*$", re.M)
+AVAIL = re.compile(r"^\|\s*pledgeavailability\s*=\s*(.*?)\s*$", re.M)
 VERSION = re.compile(r"^(?:Alpha|Patch)?\s*V?(\d+(?:\.\d+){1,3})[a-z]?$", re.I)
 
 
@@ -42,6 +46,17 @@ def patch_of(wikitext):
     return v.group(1) if v else ""
 
 
+def availability_of(wikitext):
+    """'Always available' -> 'always', 'Time-limited sales' -> 'time', 'Quantity-limited sales' -> 'quantity'; blank or
+    anything else -> ''."""
+    m = AVAIL.search(wikitext or "")
+    value = m.group(1).lower() if m else ""
+    for word, kind in (("always", "always"), ("time", "time"), ("quantity", "quantity")):
+        if word in value:
+            return kind
+    return ""
+
+
 def key(patch):
     """Sortable form: '3.24.3' -> (3, 24, 3); '' sorts first (unknown)."""
     return tuple(int(p) for p in patch.split(".")) if patch else ()
@@ -50,7 +65,8 @@ def key(patch):
 def refresh(db, now=None, force=False):
     now = int(now or time.time())
     last = db.execute("SELECT value FROM state WHERE key='release_at'").fetchone()
-    if not force and last and now - json.loads(last[0]) < REFRESH and db.execute("SELECT 1 FROM gold").fetchone():
+    if not force and last and now - json.loads(last[0]) < REFRESH and db.execute("SELECT 1 FROM gold").fetchone() \
+            and db.execute("SELECT 1 FROM availability").fetchone():
         return
     names = [r[0] for r in db.execute("SELECT name FROM catalog")]
     if not names:
@@ -66,17 +82,20 @@ def refresh(db, now=None, force=False):
             for page in r.get("pages", {}).values():
                 text = ((page.get("revisions") or [{}])[0].get("slots") or {}).get("main", {}).get("*", "")
                 title = page.get("title", "")
-                found[back.get(title, title)] = patch_of(text)
+                found[back.get(title, title)] = (patch_of(text), availability_of(text))
             time.sleep(1)
     except Exception as e:
         log.warning("couldn't refresh release patches: %s", e)
         return
     with db:
         db.execute("DELETE FROM released")
-        db.executemany("INSERT INTO released VALUES (?,?)", [(n, p) for n, p in found.items() if p])
+        db.executemany("INSERT INTO released VALUES (?,?)", [(n, p) for n, (p, _) in found.items() if p])
+        db.execute("DELETE FROM availability")
+        db.executemany("INSERT INTO availability VALUES (?,?)", [(n, a) for n, (_, a) in found.items() if a])
         db.execute("INSERT INTO state (key, value) VALUES ('release_at', ?) "
                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(now),))
-    log.info("release patches: %d ships", sum(1 for p in found.values() if p))
+    log.info("release patches: %d ships, availability: %d", sum(1 for p, _ in found.values() if p),
+             sum(1 for _, a in found.values() if a))
     try:
         page = next(iter(_get(API + PIPELINE)["query"]["pages"].values()))
         gold = gold_rows(page["revisions"][0]["slots"]["main"]["*"])
@@ -136,6 +155,22 @@ def lookup(db):
     words = {n: set(norm(n).split()) for n in have}
     out = dict(have)
     for (name,) in db.execute("SELECT name FROM catalog WHERE status='flight-ready'"):
+        if name in out:
+            continue
+        mine = set(norm(name).split())
+        base = [n for n, w in words.items() if w and w <= mine]
+        if base:
+            out[name] = have[max(base, key=lambda n: len(words[n]))]
+    return out
+
+
+def availability(db):
+    """{ship name: 'always' | 'time' | 'quantity'}, with variants that have no page of their own taking the value of
+    the ship they're named after, as in lookup()."""
+    have = {r[0]: r[1] for r in db.execute("SELECT name, kind FROM availability")}
+    words = {n: set(norm(n).split()) for n in have}
+    out = dict(have)
+    for (name,) in db.execute("SELECT name FROM catalog"):
         if name in out:
             continue
         mine = set(norm(name).split())

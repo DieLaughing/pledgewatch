@@ -1,5 +1,5 @@
 from pw.db import connect
-from pw.release import gold, gold_rows, key, patch_of
+from pw.release import availability, availability_of, gold, gold_rows, key, patch_of
 
 
 def test_patch_values():
@@ -52,3 +52,19 @@ def test_gold_matches_the_most_specific_row(tmp_path):
     assert g["Sabre Raven EX"] == {"status": "done", "patch": "3.23.1", "family": "Sabre Raven"}
     assert g["A2 Hercules"]["family"] == "" and g["Aurora Mk I LN"]["family"] == "Aurora Mk I"
     assert "Aurora Mk II" not in g and "Gladius" not in g
+
+
+def test_availability_values():
+    assert availability_of("| pledgeavailability = Always available\n") == "always"
+    assert availability_of("| pledgeavailability              = Time-limited sales\n") == "time"
+    assert availability_of("| pledgeavailability = Quantity-limited sales\n") == "quantity"
+    assert availability_of("| pledgeavailability = \n") == "" and availability_of("no box") == ""
+
+
+def test_availability_fills_variants_from_their_ship(tmp_path):
+    db = connect(str(tmp_path / "t.db"))
+    db.executemany("INSERT INTO availability VALUES (?,?)", [("Carrack", "time"), ("Carrack Expedition", "always")])
+    for name in ("Carrack", "Carrack w/C8X", "Carrack Expedition w/C8X", "Gladius"):
+        db.execute("INSERT INTO catalog (name, key) VALUES (?, ?)", (name, name.lower()))
+    a = availability(db)
+    assert a["Carrack w/C8X"] == "time" and a["Carrack Expedition w/C8X"] == "always" and "Gladius" not in a

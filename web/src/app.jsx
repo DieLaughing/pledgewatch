@@ -7,14 +7,22 @@ const FILTERS = [
   ["buyable", "Buy in game", (s) => !!s.buy, "game"],
   ["rentable", "Rent in game", (s) => !!s.rent, "game"],
   ["sale", "Discounted", (s) => s.editions.some((e) => e.inStore && e.listPrice && e.price < e.listPrice), "editions"],
-  ["limited", "Limited", (s) => s.editions.some((e) => e.inStore && e.limited), "editions"],
+  ["limited", "Limited stock", (s) => s.editions.some((e) => e.inStore && e.limited), "editions"],
+  // How RSI sells the ship, as the Star Citizen Wiki records it (RSI doesn't say).
+  ["always", "Always in store", (s) => s.sold === "always", "sold"],
+  ["saleonly", "Sale only", (s) => s.sold === "time" || s.sold === "quantity", "sold"],
   ["gold", "Gold standard", (s) => s.gold?.status === "done", "ship"],
   ["concept", "Not flyable yet", (s) => s.status && s.status !== "Flight ready", "ship"],
   // Upgrade (CCU) store. With a ship picked under "Upgrade from", only upgrades that ship can actually take count.
   ["deals", "Upgrade deals", (s, x) => ups(s, x).some((u) => s.ccu && u.price < s.ccu.value), "upgrades"],
   ["ccu", "Upgradable", (s, x) => ups(s, x).length > 0, "upgrades"],
 ];
-const GROUPS = [["editions", "Editions"], ["upgrades", "Upgrades"], ["game", "In game"], ["ship", "Ship"]];
+const GROUPS = [["editions", "Editions"], ["sold", "How it's sold"], ["upgrades", "Upgrades"], ["game", "In game"], ["ship", "Ship"]];
+const SOLD = {
+  time: ["Sale only", "Sold only during limited-time sales"],
+  quantity: ["Limited runs", "Sold only in limited-quantity sales"],
+};
+const WIKI_GUESS = "according to the Star Citizen Wiki, which players keep from past sales. RSI doesn't confirm it, so it can be wrong or out of date";
 // Upgrade filters also look at ships you can only get by upgrading right now, not as a standalone ship.
 const UPGRADE_FILTERS = ["deals", "ccu"];
 const ups = (s, x) => (s.upgrades || []).filter((u) => !x?.costs || (x.from !== s.key && u.sku in x.costs));
@@ -35,8 +43,12 @@ const SORTS = {
   size: ["Size, largest first", (a, b) => SIZES.indexOf(b.size) - SIZES.indexOf(a.size)],
   game: ["In-game price, low to high", (a, b) => (low(a.buy) || 1e15) - (low(b.buy) || 1e15)],
   "game-desc": ["In-game price, high to low", (a, b) => (low(b.buy) || -1) - (low(a.buy) || -1)],
+  value: ["Value, most aUEC per pledge dollar", (a, b) => value(b) - value(a)],
   pilot: ["Pilot firepower, high to low", (a, b) => (b.weapons?.pilot[0] ?? -1) - (a.weapons?.pilot[0] ?? -1)],
 };
+// In-game buy price per pledge dollar: the lowest price in the store now, else the last price the wiki saw. 0 = unknown.
+const pledgeDollars = (s) => (price(s) || (s.history?.length ? s.history[s.history.length - 1][1] * 100 : 0)) / 100;
+const value = (s) => (low(s.buy) && pledgeDollars(s) ? low(s.buy) / pledgeDollars(s) : 0);
 const low = (list) => (list && list.length ? Math.min(...list.map((x) => x[0])) : 0);
 const auec = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n}`) + " aUEC";
 const RATE_KEY = "pw-rate";
@@ -300,6 +312,7 @@ export function App({ data: first }) {
                       </button>
                     ))}
                   </div>
+                  {g === "sold" ? <p class="muted note">From the Star Citizen Wiki, not RSI: players note which ships only come back for sales. A good guess, not a promise.</p> : null}
                   {g === "game" ? (
                     <label class="field rate" for="rate">
                       I earn
@@ -331,7 +344,7 @@ export function App({ data: first }) {
           </dialog>
 
           {shown.length ? (
-            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromName={fromShip?.name} fromPrice={fromPrice} ctx={ctx} pickShip={pickShip} version={data.gameVersion} />)}</ul>
+            <ul class="ships">{shown.map((s) => <Ship ship={s} now={now} rate={rate} from={st.from} fromName={fromShip?.name} fromPrice={fromPrice} ctx={ctx} pickShip={pickShip} version={data.gameVersion} byValue={st.sort === "value"} />)}</ul>
           ) : (
             <p class="empty">
               {st.f.includes("sale") || st.f.includes("limited")
@@ -349,7 +362,7 @@ export function App({ data: first }) {
           minutes. Ship details from RSI's Ship Matrix and Loaner Ship Matrix. Cargo grids from{" "}
           <a href="https://sc-cargo.space" target="_blank" rel="noopener">sc-cargo.space</a> (<a href="https://github.com/sccargospace/sc-cargo.space/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>).
           In-game buy and rent prices from <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX</a>. Insurance times and
-          pledge price history, weapons and gold standard ships from the <a href="https://starcitizen.tools" target="_blank" rel="noopener">Star Citizen Wiki</a>{" "}
+          pledge price history, weapons, gold standard ships and which ships are sale only (the wiki's record, not RSI's) from the <a href="https://starcitizen.tools" target="_blank" rel="noopener">Star Citizen Wiki</a>{" "}
           (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>)
           {data.gameVersion ? `, game version ${data.gameVersion}` : ""}. Your aUEC-an-hour figure stays in your browser.
         </p>
@@ -359,7 +372,7 @@ export function App({ data: first }) {
   );
 }
 
-function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, version }) {
+function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, version, byValue }) {
   const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
@@ -371,6 +384,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
   // A rough upgrade cost (target's standard price minus yours) only until RSI's real answer is in.
   const upgrade = ctx.estimate && from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
   const buy = low(s.buy), rent = low(s.rent);
+  const sold = SOLD[s.sold];
   return (
     <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
       {s.img ? <img src={s.img} alt="" width="160" height="90" loading="lazy" decoding="async" /> : <div class="noimg" />}
@@ -380,8 +394,9 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
           <a class="here" href={`#${anchor}`} aria-label={`Link to ${s.name}`}>#</a>
         </h2>
         <p class="specs">{specs}</p>
-        {s.weapons || s.gold ? (
+        {s.weapons || s.gold || sold ? (
           <p class="arms">
+            {sold ? <span class="tag sold" title={`${sold[1]}, ${WIKI_GUESS}.`}>{sold[0]}</span> : null}
             {s.gold ? <span class={`tag ${s.gold.status === "done" ? "gold" : "goldwip"}`} title={goldText(s)}>{s.gold.status === "done" ? "Gold standard" : "Gold pass coming"}</span> : null}
             {s.weapons ? <span>{armsLine(s.weapons)}</span> : null}
           </p>
@@ -402,7 +417,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
           <div class="ed ed-game" title="Lowest in-game buy price">
             <span class="label">In game</span>
             <span class="price">{auec(buy)}</span>
-            <span class="ins">≈ {hours(buy / rate)} of play</span>
+            <span class="ins">{byValue && value(s) ? `${Math.round(value(s)).toLocaleString("en-US")} aUEC per $` : `≈ ${hours(buy / rate)} of play`}</span>
           </div>
         ) : rent ? (
           <div class="ed ed-game" title="Lowest in-game rental">
@@ -460,9 +475,7 @@ function hours(h) {
 }
 
 function Details({ s, rate, version }) {
-  const pledge = Math.min(...s.editions.filter((e) => e.inStore).map((e) => e.price), Infinity);
-  const lastPrice = s.history?.length ? s.history[s.history.length - 1][1] * 100 : 0;
-  const dollars = (Number.isFinite(pledge) ? pledge : lastPrice) / 100;
+  const dollars = pledgeDollars(s);
   const buy = low(s.buy), rent = low(s.rent);
   const history = s.history || [];
   const wb = history.filter((h) => h[2]);
@@ -537,6 +550,7 @@ function Details({ s, rate, version }) {
       {history.length ? (
         <section class="wide">
           <h3>Price history</h3>
+          {SOLD[s.sold] ? <p class="muted small sold-note">{SOLD[s.sold][1]}, {WIKI_GUESS}.</p> : null}
           <div class="stats">
             {lastStd ? <div><span>Standard now</span><b>${lastStd[1].toLocaleString("en-US")}</b></div> : null}
             <div><span>Lowest warbond</span><b>{lowestWb ? `$${lowestWb[1].toLocaleString("en-US")}` : "never seen"}</b>{lowestWb ? <i>{month(lowestWb[0])}</i> : null}</div>

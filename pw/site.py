@@ -99,10 +99,13 @@ def build(db, now=None):
     grids = cargo_grids.lookup(db)
     released = release.lookup(db)
     gold = release.gold(db)
+    avail = release.availability(db)
     out = []
     for ship in ships.values():
         if released.get(ship["name"]) and ship["status"] in ("", "Flight ready"):
             ship["released"] = released[ship["name"]]
+        if avail.get(ship["name"]):
+            ship["sold"] = avail[ship["name"]]
         if gold.get(ship["name"]):
             ship["gold"] = gold[ship["name"]]
         g = cargo_grids.find(grids, ship["name"])

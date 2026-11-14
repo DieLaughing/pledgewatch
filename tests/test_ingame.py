@@ -32,6 +32,14 @@ def test_rows_merge_variants_and_join_uex_by_uuid_or_name():
     assert '"Nowhere"' in polaris[7]  # UEX had no UUID for it, matched by name
 
 
+def test_class_name_is_the_plain_variant():
+    wiki = [{"id": 56, "name": "Cutlass Black", "class_name": "DRAK_Cutlass_Black_BIS2950", "insurance": {}, "skus": []},
+            {"id": 56, "name": "Cutlass Black", "class_name": "DRAK_Cutlass_Black", "insurance": {}, "skus": []},
+            {"id": 9, "name": "Nameless", "insurance": {}, "skus": []}]
+    rows = {r[0]: r for r in build_rows(wiki, [], [], [])}
+    assert rows["56"][11] == "DRAK_Cutlass_Black" and rows["9"][11] is None
+
+
 def test_new_ships_the_wiki_hasnt_linked_yet_match_by_name():
     wiki = [{"id": None, "uuid": "u-c", "name": "Constellation Mk V Centaurus", "shipmatrix_name": None,
              "insurance": {"claim_time": 13.5, "expedite_time": 4.5, "expedite_cost": 6750}, "skus": []},

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS servers (
 );
 CREATE TABLE IF NOT EXISTS ingame (
   mid TEXT PRIMARY KEY, uuid TEXT, claim REAL, expedite REAL, expedite_cost REAL, version TEXT,
-  history TEXT NOT NULL, buy TEXT NOT NULL, rent TEXT NOT NULL, name TEXT, weapons TEXT
+  history TEXT NOT NULL, buy TEXT NOT NULL, rent TEXT NOT NULL, name TEXT, weapons TEXT, class TEXT
 );
 CREATE TABLE IF NOT EXISTS released (name TEXT PRIMARY KEY, patch TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS availability (name TEXT PRIMARY KEY, kind TEXT NOT NULL);
@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS upgrade_skus (
 -- The planner's map: what each ship (from_ref) can upgrade into right now (sku) and what it costs from it.
 CREATE TABLE IF NOT EXISTS upgrade_paths (
   from_ref INTEGER NOT NULL, sku INTEGER NOT NULL, cost INTEGER NOT NULL, PRIMARY KEY (from_ref, sku)
+);
+-- Ship modules sold on their own (store Add-Ons), replaced on every check: what's on sale right now.
+CREATE TABLE IF NOT EXISTS modules (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT, price INTEGER, list_price INTEGER, available INTEGER,
+  warbond INTEGER, insurance TEXT
 );
 CREATE TABLE IF NOT EXISTS cargo (
   key TEXT PRIMARY KEY, name TEXT NOT NULL, names TEXT NOT NULL, scu REAL, extra REAL, boxes TEXT NOT NULL, viewer TEXT
@@ -68,6 +73,8 @@ def connect(path, check_same_thread=True):
                          "ALTER TABLE watches ADD COLUMN amount INTEGER; ALTER TABLE watches ADD COLUMN ref INTEGER;")
     if "weapons" not in {r["name"] for r in db.execute("PRAGMA table_info(ingame)")}:  # filled on the next refresh
         db.executescript("ALTER TABLE ingame ADD COLUMN weapons TEXT; DELETE FROM state WHERE key='ingame_at';")
+    if "class" not in {r["name"] for r in db.execute("PRAGMA table_info(ingame)")}:  # filled on the next refresh
+        db.executescript("ALTER TABLE ingame ADD COLUMN class TEXT; DELETE FROM state WHERE key='ingame_at';")
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
     for col, kind in (("qty", "INTEGER"), ("warbond", "INTEGER"), ("insurance", "TEXT"), ("ship_id", "TEXT"),
                       ("extras", "TEXT")):
@@ -105,6 +112,15 @@ def save(db, updates, events, now=None):
         for e in events:
             db.execute("INSERT INTO events (ts, kind, ship_id, data) VALUES (?,?,?,?)",
                        (now, e["kind"], e.get("id"), json.dumps(e)))
+
+
+def save_modules(db, modules):
+    """Replace the list of ship modules on sale with this check's."""
+    with db:
+        db.execute("DELETE FROM modules")
+        db.executemany("INSERT OR REPLACE INTO modules VALUES (?,?,?,?,?,?,?,?)",
+                       [(m["id"], m["name"], m["url"], m["price"], m["list_price"], m["available"], m.get("warbond"),
+                         m.get("insurance")) for m in modules])
 
 
 def get_state(db, key, default=None):

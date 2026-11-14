@@ -69,6 +69,8 @@ const price = (s) => {
   const v = Math.min(...s.editions.filter((e) => e.inStore).map((e) => e.price ?? Infinity));
   return Number.isFinite(v) ? v : 0;
 };
+// The ship's own standard edition on sale: not a pack with modules (a "Galaxy Freighter" has no warbond tag either).
+const isStandard = (e) => e.inStore && e.label === "Standard" && !e.modules?.length;
 const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const planLink = (to, from) => `/plan?${from ? `from=${norm(from).replace(/ /g, "-")}&` : ""}to=${norm(to).replace(/ /g, "-")}`;
 
@@ -184,7 +186,7 @@ export function App({ data: first }) {
   // now, else the latest standard price seen in the pledge or upgrade store (the wiki's history).
   const upgradable = useMemo(() => ships.map((s) => {
     if (s.ccu) return [s.key, s.name, s.ccu.value, ""];
-    const std = s.editions.find((e) => e.inStore && e.label === "Standard");
+    const std = s.editions.find(isStandard);
     if (std) return [s.key, s.name, std.price, ""];
     const last = (s.history || []).filter((h) => !h[2]).pop();
     return last ? [s.key, s.name, last[1] * 100, last[0]] : null;
@@ -374,7 +376,7 @@ export function App({ data: first }) {
 }
 
 function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, version, byValue }) {
-  const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
+  const standard = s.editions.find(isStandard);
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
   useEffect(() => { if (open && location.hash === `#${anchor}`) document.getElementById(anchor)?.scrollIntoView(); }, []);
@@ -386,6 +388,11 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
   const upgrade = ctx.estimate && from && from !== s.key && standard && fromPrice && standard.price > fromPrice ? standard.price - fromPrice : 0;
   const buy = low(s.buy), rent = low(s.rent);
   const sold = SOLD[s.sold], perDollar = byValue ? value(s) : 0;
+  // Packs with modules (Galaxy Freighter...) go in the Modules row; they're cards only when nothing else is on sale.
+  const onSale = s.editions.filter((e) => e.inStore);
+  const plain = onSale.filter((e) => !e.modules?.length);
+  const cards = plain.length ? plain : onSale;
+  const packs = plain.length ? onSale.filter((e) => e.modules?.length) : [];
   return (
     <li id={anchor} class={`ship${s.inStore ? "" : " off"}`}>
       {s.img ? <img src={s.img} alt="" width="160" height="90" loading="lazy" decoding="async" /> : <div class="noimg" />}
@@ -413,7 +420,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
         </button>
       </div>
       <div class="buy">
-        {s.editions.filter((e) => e.inStore).map((e) => <Edition e={e} standard={standard} upgrade={e === standard ? upgrade : 0} />)}
+        {cards.map((e) => <Edition e={e} standard={standard} upgrade={e === standard ? upgrade : 0} />)}
         {buy ? (
           <div class="ed ed-game" title="Lowest in-game buy price">
             <span class="label">In game</span>
@@ -434,6 +441,7 @@ function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, ve
           </p>
         ) : null}
       </div>
+      <Modules mods={s.modules || []} packs={packs} />
       <Upgrades s={s} from={from} fromName={fromName} costs={ctx.costs} pickShip={pickShip} plan={s.ccu ? planLink(s.name, ctx.costs ? fromName : "") : ""} />
       {open ? <Details s={s} rate={rate} version={version} /> : null}
     </li>
@@ -524,7 +532,7 @@ function Details({ s, rate, version }) {
               <dt>Expedite</dt><dd><b>{s.insurance.expedite} min</b> for {s.insurance.expediteCost.toLocaleString("en-US")} aUEC</dd>
             </>
           ) : <><dt>Claim</dt><dd class="muted">No times known yet</dd></>}
-          {storeIns.length ? <><dt>From the store</dt><dd>{storeIns.map((e) => `${e.label}: ${e.insurance === "Lifetime" ? "lifetime" : e.insurance}`).join(" · ")}</dd></> : null}
+          {storeIns.length ? <><dt>From the store</dt><dd>{[...new Set(storeIns.map((e) => `${e.label}: ${e.insurance === "Lifetime" ? "lifetime" : e.insurance}`))].join(" · ")}</dd></> : null}
           {s.loaners ? <><dt>Loaners</dt><dd>{s.loaners}</dd></> : null}
         </dl>
         {version && s.insurance ? <p class="muted small">Claim times from game version {version}.</p> : null}
@@ -547,6 +555,23 @@ function Details({ s, rate, version }) {
           </p>
         </section>
       ) : null}
+
+      <section class="wide loadouts">
+        <h3>Loadouts</h3>
+        <div class="lo">
+          {s.className ? (
+            <div>
+              <a class="navbtn" href={erkulShip(s)} target="_blank" rel="noopener">Build your own <span aria-hidden="true">↗</span></a>
+              <p>Erkul's calculator, opened on the {s.name}'s stock loadout. Swap guns, shields and coolers and see what changes.</p>
+            </div>
+          ) : null}
+          <div>
+            <a class="navbtn" href={erkulBuilds(s)} target="_blank" rel="noopener">Community builds <span aria-hidden="true">↗</span></a>
+            <p>Loadouts other players have shared for the {s.name}, most copied and upvoted first.</p>
+          </div>
+        </div>
+        <p class="muted small">Both open on erkul.games, a separate fan site.</p>
+      </section>
 
       {history.length ? (
         <section class="wide">
@@ -577,7 +602,7 @@ function Details({ s, rate, version }) {
         </section>
       ) : null}
 
-      {s.grid ? <Grid grid={s.grid} /> : null}
+      {s.grid || s.moduleGrids ? <Cargo s={s} /> : null}
 
       <p class="links">
         {s.rsi ? <a href={s.rsi} target="_blank" rel="noopener">RSI page</a> : null}
@@ -745,11 +770,60 @@ function Edition({ e, standard, upgrade }) {
         {money(e.price)}
       </span>
       {e.insurance ? <span class={`ins${e.insurance === "Lifetime" ? " lti" : ""}`}>{e.insurance === "Lifetime" ? "Lifetime insurance" : `${e.insurance} insurance`}</span> : null}
+      {e.modules?.length ? <span class="extra mods">+ {e.modules.join(", ")} module{e.modules.length === 1 ? "" : "s"}</span> : null}
       {e.paints ? <span class="extra" title={e.includes.join(", ")}>+ {e.paints} paint{e.paints === 1 ? "" : "s"}</span> : null}
       {saving ? <span class="save">save {money(saving)}</span> : null}
       {upgrade ? <span class="up" title="Rough estimate: RSI's real upgrade cost couldn't be checked">≈ upgrade +{money(upgrade)}</span> : null}
       {state ? <span class="state">{state}</span> : null}
     </a>
+  );
+}
+
+// erkul.games: a loadout calculator. We only link to it (no API or data licence); it opens a ship by its class name.
+const ERKUL = "https://erkul.games";
+const erkulShip = (s) => `${ERKUL}/ship/${encodeURIComponent(s.className)}`;
+const erkulBuilds = (s) => `${ERKUL}/browse?q=${encodeURIComponent(s.name)}`;
+
+// Modules for modular ships (Galaxy, Aurora Mk II): sold on their own as add-ons, and in packs with the ship.
+function Modules({ mods, packs }) {
+  if (!mods.length && !packs.length) return null;
+  const packName = (e) => (e.modules.length > 1 ? `all ${e.modules.length}` : e.modules[0]);
+  return (
+    <div class="ccu mods">
+      {mods.length ? <span class="k">Modules</span> : null}
+      {mods.map((m) => (
+        <a class="u" href={m.url} target="_blank" rel="noopener" title={`${m.name} module on its own${m.label !== "Standard" ? `, ${m.label}` : ""}`}>
+          {m.name} <b>{money(m.price)}</b>{m.available ? "" : " (sold out)"}
+        </a>
+      ))}
+      {packs.length ? <span class="k">Ship + module</span> : null}
+      {packs.map((e) => (
+        <a class="u" href={e.url} target="_blank" rel="noopener" title={`${e.label} pack with the ${e.modules.join(", ")} module${e.modules.length > 1 ? "s" : ""}`}>
+          {packName(e)} <b>{money(e.price)}</b>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// The cargo grid, with a switch for each module that changes it (Galaxy: base 64 SCU, Cargo module 720 SCU).
+function Cargo({ s }) {
+  const opts = [...(s.grid ? [["Base", s.grid]] : []), ...Object.entries(s.moduleGrids || {}).map(([k, g]) => [`${k} module`, g])];
+  const [pick, setPick] = useState(0);
+  const [, grid] = opts[Math.min(pick, opts.length - 1)];
+  return (
+    <div class="cargo">
+      {opts.length > 1 ? (
+        <div class="chips" role="group" aria-label="Cargo layout">
+          {opts.map(([label, g], i) => (
+            <button type="button" class="chip" aria-pressed={i === pick} onClick={() => setPick(i)}>
+              {label} <span class="n">{g.scu.toLocaleString("en-US")} SCU</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <Grid grid={grid} />
+    </div>
   );
 }
 

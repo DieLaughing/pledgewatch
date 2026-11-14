@@ -130,3 +130,15 @@ def test_relative_image_made_absolute():
     # RSI's store sometimes returns "/media/..." images; Discord and Fluxer reject a thumbnail that isn't a full URL
     m = message({**IDRIS, "image": "/media/abc/store_small/x.jpg"}, 1)
     assert m["embeds"][0]["thumbnail"]["url"] == "https://robertsspaceindustries.com/media/abc/store_small/x.jpg"
+
+
+def test_module_pack_lists_its_modules():
+    from pw.diff import _ev
+    from pw.store import modules
+    extras = ["Galaxy - Refinery Module", "Galaxy - Med Bay Module", "VFG Industrial Hangar"]
+    assert modules(extras) == ["Refinery", "Med Bay"]
+    item = {"id": "1", "name": "Galaxy Complete - 10 Year", "url": "u", "image": "", "price": 55000,
+            "limited": False, "level": "", "extras": extras}
+    fields = message(_ev("new", item), 1)["embeds"][0]["fields"]
+    assert {"name": "Modules", "value": "Refinery, Med Bay", "inline": True} in fields
+    assert "modules" not in _ev("new", {**item, "extras": []})

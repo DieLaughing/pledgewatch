@@ -112,6 +112,8 @@ def message(e, ts, role=None, users=(), info=None, froms=()):
                        "inline": True})
     if e["kind"] == "back" and e.get("last_seen"):
         fields.append({"name": "Last seen", "value": ago(e["last_seen"], ts), "inline": True})
+    if e.get("modules"):
+        fields.append({"name": "Modules", "value": ", ".join(e["modules"]), "inline": True})
 
     if info.get("status") and info["status"] != "Flight ready":
         fields.append({"name": "Status", "value": info["status"], "inline": True})

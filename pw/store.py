@@ -4,22 +4,41 @@ The store page loads its listing from RSI's GraphQL endpoint. No login is needed
 guest Rsi-Token cookie, which the endpoint accepts as the x-rsi-token header.
 """
 import json
+import logging
+import re
 import urllib.request
 from http.cookiejar import CookieJar
 
 BASE = "https://robertsspaceindustries.com"
+log = logging.getLogger("pledgewatch")
 
 
 def absolute(url):
     """RSI sometimes gives site-relative links (/media/...). Discord and Fluxer reject those, so make them full."""
     url = (url or "").strip()
     return BASE + url if url.startswith("/") and not url.startswith("//") else url
+
+
+def modules(extras):
+    """The ship modules in a pack: 'Galaxy - Cargo Module' -> 'Cargo'. Modular ships (Galaxy, Retaliator...) sell one
+    pack per module set, and without these the packs only differ by price."""
+    out = []
+    for x in extras:
+        m = re.search(r"([\w ]+?)\s+Module$", x.split(" - ")[-1].strip(), re.I)
+        if m:
+            out.append(m.group(1).strip())
+    return out
+
+
 STORE_PAGE = BASE + "/en/pledge/ships"
 GRAPHQL = BASE + "/graphql"
 USER_AGENT = "PledgeWatch/0.1 (store change alerts; checks every few minutes)"
 
 # Store categories to watch. 72 = Standalone Ships.
 CATEGORIES = {"72": "Standalone Ships"}
+# Add-Ons: ship modules sold on their own (Galaxy Cargo Module...), next to weapon kits we don't need. Read for the
+# website only; they don't make alerts.
+ADDONS = "3"
 
 QUERY = """query GetBrowseListingQuery($query: SearchQuery) {
   store(browse: true) {
@@ -47,8 +66,10 @@ def _opener():
     return opener, jar
 
 
-def fetch(timeout=30):
-    """Return every listed item in CATEGORIES as a list of plain dicts. Raises StoreError if the store can't be read."""
+def fetch(timeout=30, extra=None):
+    """Return every listed item in CATEGORIES as a list of plain dicts. Raises StoreError if the store can't be read.
+    With an `extra` dict, also reads the ship modules sold on their own into extra["modules"] (left out if that part
+    fails, so the ship check still counts)."""
     opener, jar = _opener()
     try:
         opener.open(STORE_PAGE, timeout=timeout).read()
@@ -58,11 +79,23 @@ def fetch(timeout=30):
         items = []
         for product, category in CATEGORIES.items():
             items += [_item(r, category) for r in _listing(opener, token, product, timeout)]
-        return items
     except StoreError:
         raise
     except Exception as e:
         raise StoreError(f"{type(e).__name__}: {e}") from e
+    if extra is not None:
+        try:
+            extra["modules"] = [_item(r, "Add-Ons") for r in _listing(opener, token, ADDONS, timeout) if is_module(r)]
+        except Exception as e:  # noqa: BLE001 - modules are a nice-to-have
+            log.warning("couldn't read ship modules: %s", e)
+    return items
+
+
+def is_module(r):
+    """A ship module on its own ('Galaxy - Cargo Module'). RSI also files weapon kits and bodykits as SHIPMOD, so
+    it's the name that decides."""
+    kinds = {g.get("kind") for g in r.get("gameItems") or []}
+    return "SHIP" not in kinds and bool(re.search(r"\bmodule\b", r.get("name", ""), re.I))
 
 
 def _listing(opener, token, product, timeout, page_size=100):
@@ -91,7 +124,7 @@ def insurance(text):
     for key, label in INSURANCE.items():
         if key in t:
             return label
-    m = __import__("re").search(r"(\d+)\s*month", t)
+    m = re.search(r"(\d+)\s*month", t)
     if m:
         n = int(m.group(1))
         return f"{n // 12} years" if n % 12 == 0 and n >= 24 else f"{n} months"
@@ -104,7 +137,8 @@ def _item(r, category):
     items = r.get("gameItems") or []
     ins = next((insurance(g["name"]) for g in items if g.get("kind") == "INSURANCE" and g.get("name")), "")
     ship_ids = [str(g["shipId"]) for g in items if g.get("kind") == "SHIP" and g.get("shipId")]
-    extras = [g["name"] for g in items if g.get("kind") in ("SKIN", "CUSTOMIZATION", "HANGARPASS") and g.get("name")]
+    extras = [g["name"] for g in items if g.get("kind") in ("SKIN", "CUSTOMIZATION", "HANGARPASS", "SHIPMOD")
+              and g.get("name")]  # SHIPMOD: a module in the pack, e.g. "Galaxy - Cargo Module"
     amount = price.get("discounted") or price.get("amount")
     return {
         "id": str(r["id"]),

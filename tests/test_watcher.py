@@ -71,3 +71,44 @@ def test_store_down_alerts_once_then_recovers(tmp_path):
     results = [check(db, [], now=10 + i) for i in range(FAILS_BEFORE_ALERT + 2)]
     assert sum(len(r) for r in results) == 1 and results[FAILS_BEFORE_ALERT - 1][0]["kind"] == "store_down"
     assert kinds(check(db, BASE, now=100)) == [("store_ok", None)]
+
+
+def test_modules_failing_never_fails_the_ship_check(tmp_path, monkeypatch):
+    from pw import store, watcher
+    from pw import db as store_db
+
+    class Page:
+        def read(self):
+            return b""
+
+    class Opener:
+        def open(self, *a, **k):
+            return Page()
+
+    class Cookie:
+        name, value = "Rsi-Token", "t"
+
+    monkeypatch.setattr(store, "_opener", lambda: (Opener(), [Cookie()]))
+    ship = {"id": 1, "name": "Galaxy - 10 Year", "url": "/x", "price": {"amount": 36000}, "stock": {}, "gameItems": []}
+    module = {"id": 2, "name": "Galaxy - Cargo Module - 10 Year", "url": "/m", "price": {"amount": 7000}, "stock": {},
+              "gameItems": [{"kind": "SHIPMOD", "name": "Galaxy - Cargo Module"}]}
+    kit = {"id": 3, "name": "Kruger Laser Weapons Kit", "url": "/k", "price": {"amount": 1250}, "stock": {},
+           "gameItems": [{"kind": "SHIPMOD", "name": "Kruger Laser Weapons Kit"}]}
+    addons = {"ok": True}
+
+    def listing(opener, token, product, timeout):
+        if product == store.ADDONS:
+            if not addons["ok"]:
+                raise TimeoutError("add-ons timed out")
+            return [module, kit]
+        return [ship]
+
+    monkeypatch.setattr(store, "_listing", listing)
+    monkeypatch.setattr(watcher, "fetch", store.fetch)
+    db = store_db.connect(str(tmp_path / "t.db"))
+    watcher.check(db, now=100)
+    assert [r["name"] for r in db.execute("SELECT name FROM modules")] == ["Galaxy - Cargo Module - 10 Year"]
+    addons["ok"] = False
+    watcher.check(db, now=400)  # the ship check still counts, and the last good module list stays
+    assert store_db.get_state(db, "last_ok") == 400 and store_db.get_state(db, "fails") == 0
+    assert db.execute("SELECT COUNT(*) FROM modules").fetchone()[0] == 1

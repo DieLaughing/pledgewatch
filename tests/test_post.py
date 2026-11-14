@@ -124,3 +124,9 @@ def test_server_cap():
     assert servers.over_cap(77, "new", "home", cap=75)
     assert not servers.over_cap(500, "home", "home", cap=75)
     assert servers.over_cap(76, "new", "", cap=75)
+
+
+def test_relative_image_made_absolute():
+    # RSI's store sometimes returns "/media/..." images; Discord and Fluxer reject a thumbnail that isn't a full URL
+    m = message({**IDRIS, "image": "/media/abc/store_small/x.jpg"}, 1)
+    assert m["embeds"][0]["thumbnail"]["url"] == "https://robertsspaceindustries.com/media/abc/store_small/x.jpg"

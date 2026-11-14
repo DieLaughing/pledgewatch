@@ -8,6 +8,12 @@ import urllib.request
 from http.cookiejar import CookieJar
 
 BASE = "https://robertsspaceindustries.com"
+
+
+def absolute(url):
+    """RSI sometimes gives site-relative links (/media/...). Discord and Fluxer reject those, so make them full."""
+    url = (url or "").strip()
+    return BASE + url if url.startswith("/") and not url.startswith("//") else url
 STORE_PAGE = BASE + "/en/pledge/ships"
 GRAPHQL = BASE + "/graphql"
 USER_AGENT = "PledgeWatch/0.1 (store change alerts; checks every few minutes)"
@@ -104,7 +110,7 @@ def _item(r, category):
         "id": str(r["id"]),
         "name": " ".join(r["name"].split()),
         "url": BASE + "/en" + r["url"] if r.get("url", "").startswith("/") else r.get("url", ""),
-        "image": ((r.get("media") or {}).get("thumbnail") or {}).get("storeSmall") or "",
+        "image": absolute(((r.get("media") or {}).get("thumbnail") or {}).get("storeSmall")),
         "category": category,
         "price": amount,  # US cents, before tax
         "list_price": price.get("amount"),

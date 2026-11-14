@@ -8,7 +8,7 @@ import time
 import urllib.request
 
 from .commands import norm
-from .store import USER_AGENT
+from .store import USER_AGENT, absolute
 
 log = logging.getLogger("pledgewatch")
 
@@ -89,7 +89,7 @@ def _ship(s):
     maker = s.get("manufacturer") or {}
     url = "https://robertsspaceindustries.com" + s["url"] if s.get("url", "").startswith("/") else ""
     media = (s.get("media") or [{}])[0] or {}
-    image = (media.get("images") or {}).get("store_small") or ""
+    image = absolute((media.get("images") or {}).get("store_small"))
     return (name, norm(name), maker.get("name", ""), maker.get("code", ""), s.get("production_status") or "",
             s.get("focus") or "", s.get("type") or "", s.get("size") or "", _num(s.get("min_crew")),
             _num(s.get("max_crew")), _num(s.get("cargocapacity")), _num(s.get("length")), image, url, str(s.get("id", "")))

@@ -14,7 +14,7 @@ import time
 import urllib.request
 
 from . import db as store_db
-from .store import BASE, STORE_PAGE, StoreError, _opener
+from .store import BASE, STORE_PAGE, StoreError, _opener, absolute
 
 log = logging.getLogger("pledgewatch")
 
@@ -62,7 +62,7 @@ class Session:
 
     def ships(self):
         return [{"id": s["id"], "name": " ".join(s["name"].split()), "msrp": s["msrp"],
-                 "image": ((s.get("medias") or {}).get("productThumbMediumAndSmall") or ""),
+                 "image": absolute((s.get("medias") or {}).get("productThumbMediumAndSmall")),
                  "skus": [{"id": k["id"], "title": " ".join(k["title"].split()), "price": k["price"]}
                           for k in s["skus"] or [] if k.get("available", True)]}
                 for s in self.query("initShipUpgrade", SHIPS)["ships"]]

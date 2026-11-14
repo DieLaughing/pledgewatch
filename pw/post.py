@@ -11,6 +11,8 @@ import time
 import urllib.error
 import urllib.request
 
+from .store import absolute
+
 log = logging.getLogger("pledgewatch")
 
 # Don't post alerts older than this (e.g. after the bot was down for a while); they'd only be noise.
@@ -119,7 +121,7 @@ def message(e, ts, role=None, users=(), info=None, froms=()):
     embed = {"author": {"name": label}, "title": e["name"], "url": e["url"], "color": colour, "fields": fields,
              "footer": {"text": "Public store: what anyone can buy, logged out · USD before tax"}, "timestamp": _iso(ts)}
     if e.get("image"):
-        embed["thumbnail"] = {"url": e["image"]}
+        embed["thumbnail"] = {"url": absolute(e["image"])}
     msg = {"embeds": [embed], "allowed_mentions": {"parse": []}}
     roles = [role] if ping and role else []
     if roles or users:
@@ -174,7 +176,7 @@ def _upgrade_message(e, ts, label, colour, users, froms):
              "footer": {"text": note + "You pay the upgrade value minus your ship's · Buy from your RSI hangar (Ship Upgrade) · USD"},
              "timestamp": _iso(ts)}
     if e.get("image"):
-        embed["thumbnail"] = {"url": e["image"]}
+        embed["thumbnail"] = {"url": absolute(e["image"])}
     msg = {"embeds": [embed], "allowed_mentions": {"parse": []}}
     if users:
         msg["content"] = " ".join(f"<@{u}>" for u in users)

@@ -20,7 +20,7 @@ from . import cargo as cargo_grids
 from . import release, whatsnew
 from .catalog import STATUS, info, match_key
 from .commands import norm
-from .store import USER_AGENT
+from .store import USER_AGENT, modules
 
 log = logging.getLogger("pledgewatch")
 
@@ -82,6 +82,7 @@ def build(db, now=None):
             "url": s["url"], "since": s["listed_since"], "lastSeen": s["last_seen"],
             "insurance": s["insurance"] or "", "paints": sum(1 for x in extras if "paint" in x.lower()),
             "includes": [x for x in extras if "hangar" not in x.lower()],
+            "modules": modules(extras),
         })
         if not ship["img"]:
             ship["img"] = s["image"]

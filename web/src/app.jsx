@@ -745,6 +745,7 @@ function Edition({ e, standard, upgrade }) {
         {money(e.price)}
       </span>
       {e.insurance ? <span class={`ins${e.insurance === "Lifetime" ? " lti" : ""}`}>{e.insurance === "Lifetime" ? "Lifetime insurance" : `${e.insurance} insurance`}</span> : null}
+      {e.modules?.length ? <span class="extra mods">+ {e.modules.join(", ")} module{e.modules.length === 1 ? "" : "s"}</span> : null}
       {e.paints ? <span class="extra" title={e.includes.join(", ")}>+ {e.paints} paint{e.paints === 1 ? "" : "s"}</span> : null}
       {saving ? <span class="save">save {money(saving)}</span> : null}
       {upgrade ? <span class="up" title="Rough estimate: RSI's real upgrade cost couldn't be checked">≈ upgrade +{money(upgrade)}</span> : null}

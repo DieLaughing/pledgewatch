@@ -4,6 +4,7 @@ The store page loads its listing from RSI's GraphQL endpoint. No login is needed
 guest Rsi-Token cookie, which the endpoint accepts as the x-rsi-token header.
 """
 import json
+import re
 import urllib.request
 from http.cookiejar import CookieJar
 
@@ -14,6 +15,19 @@ def absolute(url):
     """RSI sometimes gives site-relative links (/media/...). Discord and Fluxer reject those, so make them full."""
     url = (url or "").strip()
     return BASE + url if url.startswith("/") and not url.startswith("//") else url
+
+
+def modules(extras):
+    """The ship modules in a pack: 'Galaxy - Cargo Module' -> 'Cargo'. Modular ships (Galaxy, Retaliator...) sell one
+    pack per module set, and without these the packs only differ by price."""
+    out = []
+    for x in extras:
+        m = re.search(r"([\w ]+?)\s+Module$", x.split(" - ")[-1].strip(), re.I)
+        if m:
+            out.append(m.group(1).strip())
+    return out
+
+
 STORE_PAGE = BASE + "/en/pledge/ships"
 GRAPHQL = BASE + "/graphql"
 USER_AGENT = "PledgeWatch/0.1 (store change alerts; checks every few minutes)"
@@ -91,7 +105,7 @@ def insurance(text):
     for key, label in INSURANCE.items():
         if key in t:
             return label
-    m = __import__("re").search(r"(\d+)\s*month", t)
+    m = re.search(r"(\d+)\s*month", t)
     if m:
         n = int(m.group(1))
         return f"{n // 12} years" if n % 12 == 0 and n >= 24 else f"{n} months"
@@ -104,7 +118,8 @@ def _item(r, category):
     items = r.get("gameItems") or []
     ins = next((insurance(g["name"]) for g in items if g.get("kind") == "INSURANCE" and g.get("name")), "")
     ship_ids = [str(g["shipId"]) for g in items if g.get("kind") == "SHIP" and g.get("shipId")]
-    extras = [g["name"] for g in items if g.get("kind") in ("SKIN", "CUSTOMIZATION", "HANGARPASS") and g.get("name")]
+    extras = [g["name"] for g in items if g.get("kind") in ("SKIN", "CUSTOMIZATION", "HANGARPASS", "SHIPMOD")
+              and g.get("name")]  # SHIPMOD: a module in the pack, e.g. "Galaxy - Cargo Module"
     amount = price.get("discounted") or price.get("amount")
     return {
         "id": str(r["id"]),

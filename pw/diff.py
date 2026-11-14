@@ -1,6 +1,8 @@
 """Turn two looks at the store into a list of changes. No I/O here, so it's easy to test."""
 import json
 
+from .store import modules
+
 # A ship has to be missing this many checks in a row before we call it gone, so one bad read doesn't cause a false
 # "left the store" followed by a false "back".
 MISSES_BEFORE_GONE = 2
@@ -53,6 +55,9 @@ def diff(known, seen):
 def _ev(kind, item, **extra):
     e = {"kind": kind, "id": item.get("id"), "name": item["name"], "url": item["url"], "image": item["image"],
          "price": item["price"], "limited": item["limited"], "level": item["level"], "qty": item.get("qty")}
+    mods = modules(item.get("extras") or [])
+    if mods:
+        e["modules"] = mods
     e.update(extra)
     return e
 

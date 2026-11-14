@@ -3,6 +3,16 @@ Add an entry here with each user-facing release; the header shows a dot until a 
 import html
 
 ENTRIES = [
+    ("2026-11-13", [
+        "Modular ships (Galaxy, Aurora Mk II): a new Modules row lists the modules sold on their own and the ship + "
+        "module packs, so the packs no longer crowd the price boxes.",
+        "The cargo grid in Details can switch to a module's layout, like the Galaxy with its Cargo module (720 SCU).",
+        "New Loadouts box in Details: Build your own opens the ship in Erkul's loadout calculator, and Community builds "
+        "shows the loadouts players have shared for it, most popular first.",
+        "Bot: alerts for a ship + module pack now say which modules it comes with.",
+        "Fixed: some ship pictures didn't load (Eclipse, C8R Pisces, the Mustangs and others), and store alerts for "
+        "those ships could fail to post.",
+    ]),
     ("2026-10-27", [
         "New sort: Value, most aUEC per $ (in-game price divided by pledge price). While it's on, each card's In game "
         "box shows that figure instead of hours of play.",

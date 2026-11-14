@@ -550,10 +550,26 @@ function Details({ s, rate, version }) {
             <b>DPS</b> is damage a second while firing, <b>sustained</b> is the average once heat and reloads catch up,
             and <b>alpha</b> is one volley from every gun on the line. Stock loadout{version ? ` in game version ${version}` : ""},
             from the Star Citizen Wiki.
-            {s.className ? <> <a href={erkulShip(s)} target="_blank" rel="noopener">Change the loadout on Erkul ↗</a></> : null}
           </p>
         </section>
       ) : null}
+
+      <section class="wide loadouts">
+        <h3>Loadouts</h3>
+        <div class="lo">
+          {s.className ? (
+            <div>
+              <a class="navbtn" href={erkulShip(s)} target="_blank" rel="noopener">Build your own <span aria-hidden="true">↗</span></a>
+              <p>Erkul's calculator, opened on the {s.name}'s stock loadout. Swap guns, shields and coolers and see what changes.</p>
+            </div>
+          ) : null}
+          <div>
+            <a class="navbtn" href={erkulBuilds(s)} target="_blank" rel="noopener">Community builds <span aria-hidden="true">↗</span></a>
+            <p>Loadouts other players have shared for the {s.name}, most copied and upvoted first.</p>
+          </div>
+        </div>
+        <p class="muted small">Both open on erkul.games, a separate fan site.</p>
+      </section>
 
       {history.length ? (
         <section class="wide">
@@ -590,8 +606,6 @@ function Details({ s, rate, version }) {
         {s.rsi ? <a href={s.rsi} target="_blank" rel="noopener">RSI page</a> : null}
         <a href={`https://starcitizen.tools/index.php?search=${encodeURIComponent(s.name)}`} target="_blank" rel="noopener">Star Citizen Wiki</a>
         {s.grid ? <a href={s.grid.viewer} target="_blank" rel="noopener">3D cargo</a> : null}
-        {s.className ? <a href={erkulShip(s)} target="_blank" rel="noopener" title="Erkul's loadout calculator, opened on this ship's stock loadout">Loadout on Erkul</a> : null}
-        <a href={`${ERKUL}/browse?q=${encodeURIComponent(s.name)}`} target="_blank" rel="noopener" title="Loadouts players have shared on Erkul for this ship">Community builds</a>
       </p>
     </div>
   );
@@ -766,6 +780,7 @@ function Edition({ e, standard, upgrade }) {
 // erkul.games: a loadout calculator. We only link to it (no API or data licence); it opens a ship by its class name.
 const ERKUL = "https://erkul.games";
 const erkulShip = (s) => `${ERKUL}/ship/${encodeURIComponent(s.className)}`;
+const erkulBuilds = (s) => `${ERKUL}/browse?q=${encodeURIComponent(s.name)}`;
 
 // Modules for modular ships (Galaxy, Aurora Mk II): sold on their own as add-ons, and in packs with the ship.
 function Modules({ mods, packs }) {

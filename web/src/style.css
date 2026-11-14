@@ -191,6 +191,10 @@ html:has(.sheet[open]) { overflow: hidden; }
 .details section { background: var(--sunk); border-radius: 8px; padding: 12px 14px; min-width: 0; }
 .details section.wide, .details .grid, .details .links { grid-column: 1 / -1; }
 .details h3 { margin: 0 0 8px; font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.loadouts .lo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.loadouts .lo > div { display: grid; justify-items: start; align-content: start; gap: 6px; }
+.loadouts .lo p { margin: 0; font-size: 13px; color: var(--muted); }
+@media (max-width: 560px) { .loadouts .lo { grid-template-columns: minmax(0, 1fr); } }
 .details p { margin: 0 0 6px; font-size: 14px; }
 .details .muted, .muted { color: var(--muted); }
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 14px; }

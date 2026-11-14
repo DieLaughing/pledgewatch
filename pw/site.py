@@ -30,6 +30,22 @@ EDITION_ORDER = {"Standard": 0, "Warbond": 1, "10 Year": 2, "Best in Show": 3}
 SIZES = ["Vehicle", "Snub", "Small", "Medium", "Large", "Capital"]
 
 
+# sc-cargo's name for a module's cargo layout, where it differs from RSI's module name ("Galaxy [Medical]").
+MODULE_GRID = {"med bay": "medical"}
+
+
+def module_of(name, ships):
+    """Which ship a module on sale belongs to and the module's own name: 'Galaxy - Cargo Module - 10 Year' ->
+    (galaxy's entry, 'Cargo'). `ships` is {normalised ship name: ship}; the longest name the module starts with wins
+    ('Aurora Mk II Cargo Module' is the Aurora Mk II's, not the Aurora's)."""
+    head = re.split(r"\bmodule\b", name, maxsplit=1, flags=re.I)[0]
+    key = norm(head)
+    best = max((k for k in ships if key.startswith(k + " ")), key=len, default=None)
+    if best is None:
+        return None, ""
+    return ships[best], " ".join(re.findall(r"[A-Za-z0-9]+", head)[len(best.split()):])
+
+
 def edition(name, url):
     for label, rx in EDITIONS:
         if rx.search(name) or rx.search(url.replace("-", " ")):
@@ -97,6 +113,14 @@ def build(db, now=None):
         if ship is not None:
             ship.setdefault("upgrades", []).append({"sku": u["sku"], "label": upgrade_label(u["title"]),
                                                     "price": u["price"]})
+    by_name = {norm(sh["name"]): sh for sh in ships.values()}
+    for m in db.execute("SELECT * FROM modules ORDER BY price"):
+        ship, label = module_of(m["name"], by_name)
+        if ship is not None and label:
+            ship.setdefault("modules", []).append({
+                "name": label, "price": m["price"], "listPrice": m["list_price"], "url": m["url"],
+                "available": bool(m["available"]), "insurance": m["insurance"] or "",
+                "label": "Warbond" if m["warbond"] else edition(m["name"], m["url"] or "")})
     grids = cargo_grids.lookup(db)
     released = release.lookup(db)
     gold = release.gold(db)
@@ -113,6 +137,14 @@ def build(db, now=None):
         if g:
             ship["grid"] = {"scu": g["scu"], "boxes": g["boxes"], "viewer": g["viewer"], "concept": g["concept"]}
             ship["cargo"] = g["scu"]
+        # Cargo layouts with a module fitted (Galaxy [Cargo]), for every module on sale alone or in a pack.
+        fitted = {m["name"] for m in ship.get("modules", [])}
+        fitted |= {x for e in ship["editions"] if e["inStore"] for x in e.get("modules", [])}
+        for label in sorted(fitted):
+            mg = grids.get(norm(f"{ship['name']} {MODULE_GRID.get(label.lower(), label)}"))
+            if mg and mg is not g:
+                ship.setdefault("moduleGrids", {})[label] = {"scu": mg["scu"], "boxes": mg["boxes"],
+                                                             "viewer": mg["viewer"], "concept": mg["concept"]}
         ship["editions"].sort(key=lambda e: (not e["inStore"], EDITION_ORDER.get(e["label"], 9), e["price"] or 0))
         ship["inStore"] = any(e["inStore"] for e in ship["editions"])
         if ship["status"] and ship["status"] != "Flight ready":

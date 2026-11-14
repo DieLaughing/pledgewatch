@@ -4,11 +4,13 @@ The store page loads its listing from RSI's GraphQL endpoint. No login is needed
 guest Rsi-Token cookie, which the endpoint accepts as the x-rsi-token header.
 """
 import json
+import logging
 import re
 import urllib.request
 from http.cookiejar import CookieJar
 
 BASE = "https://robertsspaceindustries.com"
+log = logging.getLogger("pledgewatch")
 
 
 def absolute(url):
@@ -34,6 +36,9 @@ USER_AGENT = "PledgeWatch/0.1 (store change alerts; checks every few minutes)"
 
 # Store categories to watch. 72 = Standalone Ships.
 CATEGORIES = {"72": "Standalone Ships"}
+# Add-Ons: ship modules sold on their own (Galaxy Cargo Module...), next to weapon kits we don't need. Read for the
+# website only; they don't make alerts.
+ADDONS = "3"
 
 QUERY = """query GetBrowseListingQuery($query: SearchQuery) {
   store(browse: true) {
@@ -61,8 +66,10 @@ def _opener():
     return opener, jar
 
 
-def fetch(timeout=30):
-    """Return every listed item in CATEGORIES as a list of plain dicts. Raises StoreError if the store can't be read."""
+def fetch(timeout=30, extra=None):
+    """Return every listed item in CATEGORIES as a list of plain dicts. Raises StoreError if the store can't be read.
+    With an `extra` dict, also reads the ship modules sold on their own into extra["modules"] (left out if that part
+    fails, so the ship check still counts)."""
     opener, jar = _opener()
     try:
         opener.open(STORE_PAGE, timeout=timeout).read()
@@ -72,11 +79,22 @@ def fetch(timeout=30):
         items = []
         for product, category in CATEGORIES.items():
             items += [_item(r, category) for r in _listing(opener, token, product, timeout)]
-        return items
     except StoreError:
         raise
     except Exception as e:
         raise StoreError(f"{type(e).__name__}: {e}") from e
+    if extra is not None:
+        try:
+            extra["modules"] = [_item(r, "Add-Ons") for r in _listing(opener, token, ADDONS, timeout) if is_module(r)]
+        except Exception as e:  # noqa: BLE001 - modules are a nice-to-have
+            log.warning("couldn't read ship modules: %s", e)
+    return items
+
+
+def is_module(r):
+    """A ship module on its own: RSI marks it SHIPMOD; the name is the fallback."""
+    kinds = {g.get("kind") for g in r.get("gameItems") or []}
+    return "SHIPMOD" in kinds or ("SHIP" not in kinds and bool(re.search(r"\bmodule\b", r.get("name", ""), re.I)))
 
 
 def _listing(opener, token, product, timeout, page_size=100):

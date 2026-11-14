@@ -20,8 +20,9 @@ MIN_SHARE = 0.5
 
 def check(db, items=None, now=None):
     """Run one check. Returns the events it logged. `items` is for tests; normally the store is fetched."""
+    extra = {}
     try:
-        items = fetch() if items is None else items
+        items = fetch(extra=extra) if items is None else items
     except StoreError as e:
         return _failed(db, str(e), now)
     known = store_db.known(db)
@@ -37,6 +38,8 @@ def check(db, items=None, now=None):
     if fails >= FAILS_BEFORE_ALERT:
         events.append({"kind": "store_ok", "id": None, "fails": fails})
     store_db.save(db, updates, events, now)
+    if "modules" in extra:
+        store_db.save_modules(db, extra["modules"])
     store_db.set_state(db, "fails", 0)
     store_db.set_state(db, "last_ok", int(now or time.time()))
     return events

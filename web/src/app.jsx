@@ -69,6 +69,8 @@ const price = (s) => {
   const v = Math.min(...s.editions.filter((e) => e.inStore).map((e) => e.price ?? Infinity));
   return Number.isFinite(v) ? v : 0;
 };
+// The ship's own standard edition on sale: not a pack with modules (a "Galaxy Freighter" has no warbond tag either).
+const isStandard = (e) => e.inStore && e.label === "Standard" && !e.modules?.length;
 const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const planLink = (to, from) => `/plan?${from ? `from=${norm(from).replace(/ /g, "-")}&` : ""}to=${norm(to).replace(/ /g, "-")}`;
 
@@ -184,7 +186,7 @@ export function App({ data: first }) {
   // now, else the latest standard price seen in the pledge or upgrade store (the wiki's history).
   const upgradable = useMemo(() => ships.map((s) => {
     if (s.ccu) return [s.key, s.name, s.ccu.value, ""];
-    const std = s.editions.find((e) => e.inStore && e.label === "Standard");
+    const std = s.editions.find(isStandard);
     if (std) return [s.key, s.name, std.price, ""];
     const last = (s.history || []).filter((h) => !h[2]).pop();
     return last ? [s.key, s.name, last[1] * 100, last[0]] : null;
@@ -374,7 +376,7 @@ export function App({ data: first }) {
 }
 
 function Ship({ ship: s, now, rate, from, fromName, fromPrice, ctx, pickShip, version, byValue }) {
-  const standard = s.editions.find((e) => e.inStore && e.label === "Standard");
+  const standard = s.editions.find(isStandard);
   const anchor = s.key.replace(/ /g, "-");
   const [open, setOpen] = useState(() => location.hash === `#${anchor}`);
   useEffect(() => { if (open && location.hash === `#${anchor}`) document.getElementById(anchor)?.scrollIntoView(); }, []);

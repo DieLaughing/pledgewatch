@@ -98,4 +98,5 @@ def test_modules_on_sale_attach_to_their_ship_with_fitted_cargo(tmp_path):
     assert module_of("Aurora Mk II Combat Module", by_name) == ("A2", "Combat")
     assert module_of("Kruger Snub Laser Weapons Kit", by_name) == (None, "")
     assert is_module({"name": "Galaxy - Cargo Module", "gameItems": [{"kind": "SHIPMOD"}]})
-    assert not is_module({"name": "Kruger Snub Laser Weapons Kit", "gameItems": [{"kind": "WEAPON"}]})
+    assert not is_module({"name": "Kruger Snub Laser Weapons Kit", "gameItems": [{"kind": "SHIPMOD"}]})
+    assert not is_module({"name": "Shiv - Lunatic Bodykit", "gameItems": [{"kind": "SHIPMOD"}]})

@@ -92,9 +92,10 @@ def fetch(timeout=30, extra=None):
 
 
 def is_module(r):
-    """A ship module on its own: RSI marks it SHIPMOD; the name is the fallback."""
+    """A ship module on its own ('Galaxy - Cargo Module'). RSI also files weapon kits and bodykits as SHIPMOD, so
+    it's the name that decides."""
     kinds = {g.get("kind") for g in r.get("gameItems") or []}
-    return "SHIPMOD" in kinds or ("SHIP" not in kinds and bool(re.search(r"\bmodule\b", r.get("name", ""), re.I)))
+    return "SHIP" not in kinds and bool(re.search(r"\bmodule\b", r.get("name", ""), re.I))
 
 
 def _listing(opener, token, product, timeout, page_size=100):

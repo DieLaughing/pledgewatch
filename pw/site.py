@@ -199,6 +199,8 @@ def _game(g):
         out["rent"] = [[int(p), t] for p, t, _ in rent]
     if g["weapons"]:
         out["weapons"] = json.loads(g["weapons"])
+    if g["class"]:
+        out["className"] = g["class"]
     return out
 
 

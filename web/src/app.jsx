@@ -550,6 +550,7 @@ function Details({ s, rate, version }) {
             <b>DPS</b> is damage a second while firing, <b>sustained</b> is the average once heat and reloads catch up,
             and <b>alpha</b> is one volley from every gun on the line. Stock loadout{version ? ` in game version ${version}` : ""},
             from the Star Citizen Wiki.
+            {s.className ? <> <a href={erkulShip(s)} target="_blank" rel="noopener">Change the loadout on Erkul ↗</a></> : null}
           </p>
         </section>
       ) : null}
@@ -589,6 +590,8 @@ function Details({ s, rate, version }) {
         {s.rsi ? <a href={s.rsi} target="_blank" rel="noopener">RSI page</a> : null}
         <a href={`https://starcitizen.tools/index.php?search=${encodeURIComponent(s.name)}`} target="_blank" rel="noopener">Star Citizen Wiki</a>
         {s.grid ? <a href={s.grid.viewer} target="_blank" rel="noopener">3D cargo</a> : null}
+        {s.className ? <a href={erkulShip(s)} target="_blank" rel="noopener" title="Erkul's loadout calculator, opened on this ship's stock loadout">Loadout on Erkul</a> : null}
+        <a href={`${ERKUL}/browse?q=${encodeURIComponent(s.name)}`} target="_blank" rel="noopener" title="Loadouts players have shared on Erkul for this ship">Community builds</a>
       </p>
     </div>
   );
@@ -759,6 +762,10 @@ function Edition({ e, standard, upgrade }) {
     </a>
   );
 }
+
+// erkul.games: a loadout calculator. We only link to it (no API or data licence); it opens a ship by its class name.
+const ERKUL = "https://erkul.games";
+const erkulShip = (s) => `${ERKUL}/ship/${encodeURIComponent(s.className)}`;
 
 // Modules for modular ships (Galaxy, Aurora Mk II): sold on their own as add-ons, and in packs with the ship.
 function Modules({ mods, packs }) {

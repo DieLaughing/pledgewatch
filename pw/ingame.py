@@ -23,7 +23,7 @@ ITEMS = "https://api.star-citizen.wiki/api/v2/items?filter%5Btype%5D={}&page%5Bs
 UEX = "https://api.uexcorp.space/2.0/"
 REFRESH = 86400
 PAUSE = 1.5  # between wiki pages; each is ~3 MB
-KEEP = ("id", "uuid", "name", "shipmatrix_name", "insurance", "skus", "version")
+KEEP = ("id", "uuid", "name", "shipmatrix_name", "class_name", "insurance", "skus", "version")
 
 
 def _get(url):
@@ -78,7 +78,7 @@ def refresh(db, now=None, force=False):
     rows = build_rows(wiki, vehicles, buys, rents, ids)
     with db:
         db.execute("DELETE FROM ingame")
-        db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+        db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         db.execute("INSERT INTO state (key, value) VALUES ('ingame_at', ?) "
                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(now),))
     log.info("in-game data: %d ships from the wiki, %d buy and %d rent prices", len(rows), len(buys), len(rents))
@@ -86,7 +86,7 @@ def refresh(db, now=None, force=False):
 
 def build_rows(wiki, vehicles, buys, rents, ids=None):
     """One row per Ship Matrix id: (mid, uuid, claim min, expedite min, expedite aUEC, version, history, buy, rent,
-    wiki name, weapons). Several wiki entries can share an id (variants): insurance and weapons come from the one with
+    wiki name, weapons, class name). Several wiki entries can share an id (variants): insurance and weapons come from the one with
     insurance data, and prices and history are merged across all of them. UEX is matched by game UUID, or by name when UEX has no UUID.
     `ids` ({normalised Ship Matrix name: id}) places wiki entries that aren't linked to the Ship Matrix yet, which
     happens with newly released ships (Constellation Mk V Centaurus), by their exact name."""
@@ -120,10 +120,14 @@ def build_rows(wiki, vehicles, buys, rents, ids=None):
                     for row in prices.get((key, kind), []):
                         found[kind][(row[0], row[1])] = row
         skus = [s for v in vs for s in (v.get("skus") or [])]
+        # The game's class name (RSI_Galaxy) is how erkul.games opens a ship. Variants share an id; the plain one has
+        # the shortest name (DRAK_Cutlass_Black, not DRAK_Cutlass_Black_BIS2950 or AEGS_..._Display).
+        classes = [v["class_name"] for v in vs if v.get("class_name")]
         out.append((str(mid), main.get("uuid") or "", ins.get("claim_time"), ins.get("expedite_time"),
                     ins.get("expedite_cost"), (main.get("version") or "").split("-")[0], json.dumps(history(skus)),
                     json.dumps(sorted(found["buy"].values())), json.dumps(sorted(found["rent"].values())),
-                    main.get("name") or "", json.dumps(main.get("weapons")) if main.get("weapons") else None))
+                    main.get("name") or "", json.dumps(main.get("weapons")) if main.get("weapons") else None,
+                    min(classes, key=len) if classes else None))
     return out
 
 

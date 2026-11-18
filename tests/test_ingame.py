@@ -1,3 +1,4 @@
+import json
 from pw import ingame
 from pw.ingame import build_rows, by_hardpoint, history, weapons
 
@@ -171,3 +172,34 @@ def test_hardpoints_are_cached_per_game_version_and_one_failure_stops_reads(monk
     # not read while the wiki is down, and kept under its old version so it's read again on the next refresh
     assert ingame._hardpoints({"uuid": "b", "version": "4.3"}, cached, reach) == ["4.2", "stale"]
     assert len(calls) == 2
+
+
+def test_a_failed_refresh_keeps_the_ships_it_read_for_the_retry(monkeypatch):
+    from pw import db as pdb
+    ship = {"uuid": "u1", "version": "4.3", "name": "Tiburon", "weaponry": {}, "turrets": {},
+            "ports": [{"type": "WeaponGun", "equipped_item_uuid": "x"}]}
+    reads, fail = [], {"uex": True}
+
+    def get(url):
+        if "/vehicles/" in url:
+            reads.append(url)
+            return {"data": {"ports": []}}
+        if "items" in url:
+            return {"data": [], "meta": {"last_page": 1}}
+        if "vehicles?" in url:
+            return {"data": [dict(ship, weaponry={"fixed_weapons": {"weapons": [{"name": "G"}]}})],
+                    "meta": {"last_page": 1}}
+        if fail["uex"]:
+            raise OSError("reset")
+        return {"data": []}
+    monkeypatch.setattr(ingame, "_get", get)
+    monkeypatch.setattr(ingame, "SHIP_PAUSE", 0)
+    monkeypatch.setattr(ingame, "_unsaved", {})
+    con = pdb.connect(":memory:")
+    ingame.refresh(con, now=1000)
+    assert len(reads) == 1 and con.execute("SELECT count(*) FROM ingame").fetchone()[0] == 0
+    fail["uex"] = False
+    ingame.refresh(con, now=1300)
+    assert len(reads) == 1  # not read again
+    assert "u1" in json.loads(con.execute("SELECT value FROM state WHERE key='ingame_ports'").fetchone()[0])
+    assert ingame._unsaved == {}

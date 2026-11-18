@@ -25,7 +25,8 @@ ITEMS = "https://api.star-citizen.wiki/api/v2/items?filter%5Btype%5D={}&page%5Bs
 UEX = "https://api.uexcorp.space/2.0/"
 REFRESH = 86400
 PAUSE = 1.5  # between wiki pages; each is ~3 MB
-SHIP_PAUSE = 0.5  # between single ships read for their hardpoints (~90 after a game patch, about 2 minutes)
+SHIP_PAUSE = 0.5  # between single ships read for their hardpoints (~100 after a game patch, about 2 minutes)
+_unsaved = {}  # ships read by a refresh that then failed, so the retry doesn't read them again
 KEEP = ("id", "uuid", "name", "shipmatrix_name", "class_name", "insurance", "skus", "version")
 
 
@@ -53,7 +54,7 @@ def refresh(db, now=None, force=False):
     if not force and last and cached and now - json.loads(last[0]) < REFRESH:
         return
     # Ships re-read from their hardpoints, {uuid: [game version, by_hardpoint()]}: fetched again only after a patch.
-    cached, ports, reach = json.loads(cached[0]) if cached else {}, {}, {"ok": True}
+    cached, ports, reach = {**(json.loads(cached[0]) if cached else {}), **_unsaved}, {}, {"ok": True}
     try:
         # Ship guns and missile racks (~3 MB together): the vehicle list doesn't nest guns in their mounts or say
         # what a rack holds, so sizes and rack capacities come from here.
@@ -91,7 +92,8 @@ def refresh(db, now=None, force=False):
         buys = _get(UEX + "vehicles_purchases_prices_all")["data"]
         rents = _get(UEX + "vehicles_rentals_prices_all")["data"]
     except Exception as e:
-        log.warning("couldn't refresh in-game data: %s", e)
+        _unsaved.update(ports)
+        log.warning("couldn't refresh in-game data (%d ships re-read kept for the retry): %s", len(_unsaved), e)
         return
     ids = {norm(c["name"]): c["mid"] for c in db.execute("SELECT name, mid FROM catalog WHERE mid IS NOT NULL")}
     rows = build_rows(wiki, vehicles, buys, rents, ids)
@@ -100,6 +102,7 @@ def refresh(db, now=None, force=False):
         db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         db.executemany("INSERT INTO state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                        (("ingame_at", json.dumps(now)), ("ingame_ports", json.dumps(ports))))
+    _unsaved.clear()
     log.info("in-game data: %d ships from the wiki, %d buy and %d rent prices", len(rows), len(buys), len(rents))
 
 

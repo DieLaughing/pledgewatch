@@ -102,6 +102,7 @@ def refresh(db, now=None, force=False):
     rows = build_rows(wiki, vehicles, buys, rents, ids)
     with db:
         db.execute("DELETE FROM ingame")
+        db.execute("DELETE FROM state WHERE key='ingame_ports'")  # the cache before turret flags (2026-11-18)
         db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         db.executemany("INSERT INTO state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                        (("ingame_at", json.dumps(now)), ("ingame_hardpoints", json.dumps(ports))))

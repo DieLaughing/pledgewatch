@@ -239,3 +239,15 @@ def test_turrets_the_wiki_doesnt_list_get_their_pilot_slaving_from_the_game_file
     version, sorted_ = ingame._hardpoints(v, {}, {"ok": True})
     assert version is None  # read again on the next refresh
     assert all(t["is_pilot_slaveable"] is None for t in sorted_["turrets"]["remote"])
+
+
+def test_opening_the_database_leaves_no_write_open(tmp_path):
+    """The app opens it from two threads at start; a write left open in connect() locks the other out (2026-11-18)."""
+    from pw import db as pdb
+    path = str(tmp_path / "pw.db")
+    first = pdb.connect(path)
+    assert not first.in_transaction
+    second = pdb.connect(path, check_same_thread=False)
+    assert not second.in_transaction
+    with second:
+        second.execute("INSERT INTO state (key, value) VALUES ('x', '1')")

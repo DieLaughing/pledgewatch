@@ -75,7 +75,6 @@ def connect(path, check_same_thread=True):
         db.executescript("ALTER TABLE ingame ADD COLUMN weapons TEXT; DELETE FROM state WHERE key='ingame_at';")
     if "class" not in {r["name"] for r in db.execute("PRAGMA table_info(ingame)")}:  # filled on the next refresh
         db.executescript("ALTER TABLE ingame ADD COLUMN class TEXT; DELETE FROM state WHERE key='ingame_at';")
-    db.execute("DELETE FROM state WHERE key='ingame_ports'")  # 2026-11-18 cache without turret flags: now ingame_hardpoints
     cols = {r["name"] for r in db.execute("PRAGMA table_info(ships)")}
     for col, kind in (("qty", "INTEGER"), ("warbond", "INTEGER"), ("insurance", "TEXT"), ("ship_id", "TEXT"),
                       ("extras", "TEXT")):

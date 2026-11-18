@@ -49,5 +49,16 @@ wait_for_site pledgewatch-next || { docker rm -f pledgewatch-next >/dev/null; ex
 docker compose --project-directory "$COMPOSE_DIR" up -d --no-deps --force-recreate pledgewatch 2>&1 | tail -1
 wait_for_site pledgewatch
 docker stop -t 15 pledgewatch-next >/dev/null && docker rm pledgewatch-next >/dev/null
+# The site comes up before the store checks start, so also wait for those: a crash there (2026-11-18, a database lock)
+# otherwise only shows as a restart loop after the deploy has said it's fine.
+for _ in $(seq 1 60); do
+  docker logs pledgewatch 2>&1 | grep -q "watching the RSI store" && break
+  sleep 1
+done
+sleep 5
+if ! docker logs pledgewatch 2>&1 | grep -q "watching the RSI store" || docker logs pledgewatch 2>&1 | grep -q Traceback; then
+  echo "pledgewatch didn't start its store checks cleanly; roll back with the previous image" >&2
+  docker logs --tail 20 pledgewatch >&2; exit 1
+fi
 echo "pledgewatch swapped in with no gap"
 REMOTE

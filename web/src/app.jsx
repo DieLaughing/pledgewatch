@@ -367,7 +367,8 @@ export function App({ data: first }) {
           In-game buy and rent prices from <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX</a>. Insurance times and
           pledge price history, weapons, gold standard ships and which ships are sale only (the wiki's record, not RSI's) from the <a href="https://starcitizen.tools" target="_blank" rel="noopener">Star Citizen Wiki</a>{" "}
           (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>)
-          {data.gameVersion ? `, game version ${data.gameVersion}` : ""}. Your aUEC-an-hour figure stays in your browser.
+          {data.gameVersion ? `, game version ${data.gameVersion}` : ""}, and which turrets the pilot can slave from the wiki team's{" "}
+          <a href="https://github.com/StarCitizenWiki/scunpacked-data" target="_blank" rel="noopener">game file dump</a>. Your aUEC-an-hour figure stays in your browser.
         </p>
         <p>No accounts, no cookies, no tracking. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://github.com/DieLaughing/pledgewatch" target="_blank" rel="noopener">Source on GitHub</a> (AGPL) · <a href="/ships.json">The data as JSON</a>.</p>
       </footer>

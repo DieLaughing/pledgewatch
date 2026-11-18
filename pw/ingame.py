@@ -5,6 +5,8 @@
   edition and price the wiki has seen, with dates) and its weapons: which guns the pilot fires, and the turrets.
   Its vehicle id is the Ship Matrix id. The wiki's weapon summary sometimes files turret guns as the pilot's (Tiburon,
   Corsair, Hull C) or leaves a gun out (the Tiburon's beam); those ships are re-read gun by gun from their hardpoints.
+- scunpacked-data (github.com/StarCitizenWiki/scunpacked-data, the wiki team's game file dump): whether the pilot can
+  slave a turret, for turrets the wiki's turret list leaves out (it only carries that flag for the ones it lists).
 - UEX (uexcorp.space): where a ship can be bought or rented in game and for how much aUEC. Joined to the wiki by the
   game's vehicle UUID.
 """
@@ -21,6 +23,7 @@ log = logging.getLogger("pledgewatch")
 
 WIKI = "https://api.star-citizen.wiki/api/v2/vehicles?page%5Bsize%5D=50&page%5Bnumber%5D={}"
 VEHICLE = "https://api.star-citizen.wiki/api/v2/vehicles/{}"  # one ship, hardpoints nested (~500 KB)
+SCUNPACKED = "https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master/ships/{}.json"  # ~200 KB
 ITEMS = "https://api.star-citizen.wiki/api/v2/items?filter%5Btype%5D={}&page%5Bsize%5D=200&page%5Bnumber%5D={}"
 UEX = "https://api.uexcorp.space/2.0/"
 REFRESH = 86400
@@ -50,7 +53,7 @@ def _items(kind):
 def refresh(db, now=None, force=False):
     now = int(now or time.time())
     last = db.execute("SELECT value FROM state WHERE key='ingame_at'").fetchone()
-    cached = db.execute("SELECT value FROM state WHERE key='ingame_ports'").fetchone()
+    cached = db.execute("SELECT value FROM state WHERE key='ingame_hardpoints'").fetchone()
     if not force and last and cached and now - json.loads(last[0]) < REFRESH:
         return
     # Ships re-read from their hardpoints, {uuid: [game version, by_hardpoint()]}: fetched again only after a patch.
@@ -101,7 +104,7 @@ def refresh(db, now=None, force=False):
         db.execute("DELETE FROM ingame")
         db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         db.executemany("INSERT INTO state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                       (("ingame_at", json.dumps(now)), ("ingame_ports", json.dumps(ports))))
+                       (("ingame_at", json.dumps(now)), ("ingame_hardpoints", json.dumps(ports))))
     _unsaved.clear()
     log.info("in-game data: %d ships from the wiki, %d buy and %d rent prices", len(rows), len(buys), len(rents))
 
@@ -188,7 +191,8 @@ def _hardpoints(v, cached, reach):
     """[game version, by_hardpoint()] for one ship: from the cache while the game version is the same, else from the
     wiki. After one failed read the rest of this refresh doesn't try (reach), so a wiki outage can't hold up the store
     checks; those ships keep their cached entry (with its old version, so it's read again next time), else None and
-    the wiki's summary until tomorrow."""
+    the wiki's summary until tomorrow. An entry whose turret flags couldn't be filled in is cached with no version,
+    so it's read again on the next refresh."""
     hit = cached.get(v["uuid"])
     if hit and hit[0] == v.get("version"):
         return hit
@@ -196,11 +200,32 @@ def _hardpoints(v, cached, reach):
         try:
             d = _get(VEHICLE.format(v["uuid"]))["data"]
             time.sleep(SHIP_PAUSE)
-            return [v.get("version"), by_hardpoint(d, v.get("turrets") or {})]
+            sorted_ = by_hardpoint(d, v.get("turrets") or {})
+            return [v.get("version") if _slaving(v.get("class_name"), sorted_) else None, sorted_]
         except Exception as e:
             reach["ok"] = False
             log.warning("couldn't read %s's hardpoints, using cached or summary weapons: %s", v.get("name"), e)
     return hit
+
+
+def _slaving(class_name, sorted_):
+    """Fill in who can fire the turrets the wiki doesn't list (the Corsair's tail turret, the Tiburon's four) from the
+    game files' IsPilotSlaveable, matched by hardpoint. Wherever both have the flag they agree (158 turrets, checked
+    2026-11-18). False when the file couldn't be read; the turrets stay gunner-only until the next try."""
+    unknown = [t for m in ("manned", "remote") for t in sorted_["turrets"][m]
+               if t.get("is_pilot_slaveable") is None and t.get("hardpoint")]
+    if not unknown or not class_name:
+        return True
+    try:
+        flags = {p.get("HardpointName"): p.get("IsPilotSlaveable")
+                 for p in _get(SCUNPACKED.format(class_name.lower())).get("Loadout") or []}
+    except Exception as e:
+        log.warning("couldn't read %s's turret controls from scunpacked-data: %s", class_name, e)
+        return False
+    for t in unknown:
+        if flags.get(t["hardpoint"]) is not None:
+            t["is_pilot_slaveable"] = flags[t["hardpoint"]]
+    return True
 
 
 def _gun(item):
@@ -237,8 +262,8 @@ def by_hardpoint(detail, turrets):
             return [_gun(it)] if (it.get("classification") or "").startswith("Ship.Weapon") else []
         return [g for c in children(p) for g in guns_in(c)]
 
-    def turret(x, guns):
-        return {"is_pilot_slaveable": x.get("is_pilot_slaveable"), "weapons": guns,
+    def turret(x, guns, hardpoint=None):
+        return {"hardpoint": hardpoint, "is_pilot_slaveable": x.get("is_pilot_slaveable"), "weapons": guns,
                 "weapon_sizes": x.get("weapon_sizes") or [g["size"] for g in guns],
                 "payload_class_names": x.get("payload_class_names") or [], "payload_types": x.get("payload_types") or []}
 
@@ -247,11 +272,11 @@ def by_hardpoint(detail, turrets):
         if name in listed and item(p).get("type") != "WeaponGun":
             m, x = listed.pop(name)
             guns = guns_in(p)
-            out[TURRET_PORTS.get(cat, m)].append(turret(x, guns) if guns else turret(x, x.get("weapons") or []))
+            out[TURRET_PORTS.get(cat, m)].append(turret(x, guns or x.get("weapons") or [], name))
         elif (top and cat in TURRET_PORTS) or item(p).get("type") == "WeaponMount":  # WeaponMount: a crew door gun
             guns = guns_in(p)
             if guns:  # else a camera, a tractor beam or nothing fitted
-                out[TURRET_PORTS.get(cat, "manned")].append(turret({}, guns))
+                out[TURRET_PORTS.get(cat, "manned")].append(turret({}, guns, name))
         elif item(p).get("type") == "WeaponGun":
             fixed.extend(guns_in(p))
         else:

@@ -37,6 +37,14 @@ Citizen Wiki, https://starcitizen.tools). Wiki content is licensed CC BY-SA 4.0
 (https://creativecommons.org/licenses/by-sa/4.0/); Pledge Watch credits it on the site and passes those figures on
 under the same terms in `/ships.json`.
 
+## scunpacked-data
+
+For turrets the wiki API's turret list leaves out, whether the pilot can slave the turret (`IsPilotSlaveable`) is read
+from the ship files in https://github.com/StarCitizenWiki/scunpacked-data, the Star Citizen Wiki team's dump of the
+game files (made with https://github.com/octfx/ScDataDumper). The repository doesn't state a licence; Pledge Watch uses
+that one flag, credits the source on the site, and doesn't redistribute the files. The underlying game data belongs to
+Cloud Imperium Games.
+
 ## UEX
 
 In-game buy and rent prices come from the public UEX API (https://uexcorp.space), credited on the site.

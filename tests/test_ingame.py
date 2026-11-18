@@ -201,5 +201,41 @@ def test_a_failed_refresh_keeps_the_ships_it_read_for_the_retry(monkeypatch):
     fail["uex"] = False
     ingame.refresh(con, now=1300)
     assert len(reads) == 1  # not read again
-    assert "u1" in json.loads(con.execute("SELECT value FROM state WHERE key='ingame_ports'").fetchone()[0])
+    assert "u1" in json.loads(con.execute("SELECT value FROM state WHERE key='ingame_hardpoints'").fetchone()[0])
     assert ingame._unsaved == {}
+
+
+def test_turrets_the_wiki_doesnt_list_get_their_pilot_slaving_from_the_game_files(monkeypatch):
+    """Corsair: the tail turret isn't in the wiki's turret list, so the wiki has no is_pilot_slaveable for it."""
+    badger = _gun("CF-227 Badger Repeater", 2, 328, 167.5, 26)
+    detail = {"ports": [_mount("hardpoint_tail_turret", "Remote Turrets", badger, badger),
+                        _mount("hardpoint_bridge", "Remote Turrets", badger),
+                        _mount("hardpoint_manned_left", "Manned Turrets", badger, badger)]}
+    listed = {"manned": [{"hardpoint_name": "hardpoint_manned_left", "is_pilot_slaveable": False}]}
+    urls = []
+
+    def get(url):
+        urls.append(url)
+        if "scunpacked" not in url:
+            return {"data": detail}
+        return {"Loadout": [{"HardpointName": "hardpoint_tail_turret", "IsPilotSlaveable": True},
+                            {"HardpointName": "hardpoint_bridge", "IsPilotSlaveable": False},
+                            {"HardpointName": "hardpoint_manned_left", "IsPilotSlaveable": True}]}
+    monkeypatch.setattr(ingame, "_get", get)
+    monkeypatch.setattr(ingame, "SHIP_PAUSE", 0)
+    v = {"uuid": "u", "version": "4.3", "class_name": "DRAK_Corsair", "turrets": listed,
+         "weaponry": {"fixed_weapons": {"weapons": []}}}
+    version, sorted_ = ingame._hardpoints(v, {}, {"ok": True})
+    assert version == "4.3" and urls[-1].endswith("/ships/drak_corsair.json")
+    rows = weapons(v, {}, {}, {}, sorted_)["guns"]
+    assert [(r[0], r[1], r[3][0][0]) for r in rows] == [("both", "remote", 2), ("gunner", "manned", 2),  # wiki's flag kept
+                                                       ("gunner", "remote", 1)]
+
+    def down(url):
+        if "scunpacked" in url:
+            raise OSError("github down")
+        return {"data": detail}
+    monkeypatch.setattr(ingame, "_get", down)
+    version, sorted_ = ingame._hardpoints(v, {}, {"ok": True})
+    assert version is None  # read again on the next refresh
+    assert all(t["is_pilot_slaveable"] is None for t in sorted_["turrets"]["remote"])

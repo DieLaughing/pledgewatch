@@ -11,6 +11,9 @@ ENTRIES = [
         "Fixed missile counts that left out racks inside turrets and pods and bombs (Nova, Storm AA, Ballista, A1 "
         "Spirit, Polaris, Super Hornets, Starlancer TAC and others). Rockets are listed too.",
         "Fixed a few gun sizes (F7C Hornet Wildfire, F8C Lightning Executive, Javelin).",
+        "Turrets the pilot can slave now show under Pilot or gunner on those ships too: the Corsair's tail turret, the "
+        "Tiburon's four cannon turrets, and turrets on the Valkyrie, Hull B and C, Constellation Mk V Centaurus, Zeus "
+        "Mk II, Prowler, Shiv, Nova, A1 Spirit, Apollo and Hermes. Their Pilot alone figures include them.",
     ]),
     ("2026-11-13", [
         "Modular ships (Galaxy, Aurora Mk II): a new Modules row lists the modules sold on their own and the ship + "

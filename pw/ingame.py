@@ -3,7 +3,8 @@
 - Star Citizen Wiki API (api.star-citizen.wiki, content CC BY-SA 4.0): insurance claim and expedite times and the
   expedite cost in aUEC (from the game files, with the game version), the ship's pledge store history (every
   edition and price the wiki has seen, with dates) and its weapons: which guns the pilot fires, and the turrets.
-  Its vehicle id is the Ship Matrix id.
+  Its vehicle id is the Ship Matrix id. The wiki's weapon summary sometimes files turret guns as the pilot's (Tiburon,
+  Corsair, Hull C) or leaves a gun out (the Tiburon's beam); those ships are re-read gun by gun from their hardpoints.
 - UEX (uexcorp.space): where a ship can be bought or rented in game and for how much aUEC. Joined to the wiki by the
   game's vehicle UUID.
 """
@@ -19,10 +20,12 @@ from .store import USER_AGENT
 log = logging.getLogger("pledgewatch")
 
 WIKI = "https://api.star-citizen.wiki/api/v2/vehicles?page%5Bsize%5D=50&page%5Bnumber%5D={}"
+VEHICLE = "https://api.star-citizen.wiki/api/v2/vehicles/{}"  # one ship, hardpoints nested (~500 KB)
 ITEMS = "https://api.star-citizen.wiki/api/v2/items?filter%5Btype%5D={}&page%5Bsize%5D=200&page%5Bnumber%5D={}"
 UEX = "https://api.uexcorp.space/2.0/"
 REFRESH = 86400
 PAUSE = 1.5  # between wiki pages; each is ~3 MB
+SHIP_PAUSE = 0.5  # between single ships read for their hardpoints (~90 after a game patch, about 2 minutes)
 KEEP = ("id", "uuid", "name", "shipmatrix_name", "class_name", "insurance", "skus", "version")
 
 
@@ -46,13 +49,22 @@ def _items(kind):
 def refresh(db, now=None, force=False):
     now = int(now or time.time())
     last = db.execute("SELECT value FROM state WHERE key='ingame_at'").fetchone()
-    if not force and last and now - json.loads(last[0]) < REFRESH:
+    cached = db.execute("SELECT value FROM state WHERE key='ingame_ports'").fetchone()
+    if not force and last and cached and now - json.loads(last[0]) < REFRESH:
         return
+    # Ships re-read from their hardpoints, {uuid: [game version, by_hardpoint()]}: fetched again only after a patch.
+    cached, ports, reach = json.loads(cached[0]) if cached else {}, {}, {"ok": True}
     try:
         # Ship guns and missile racks (~3 MB together): the vehicle list doesn't nest guns in their mounts or say
         # what a rack holds, so sizes and rack capacities come from here.
         guns = [g for g in _items("WeaponGun") if g.get("name")]
-        sizes = {g["name"]: g.get("size") for g in guns}
+        # A few names cover guns of different sizes (M9A Cannon is S7 to S12): those ships are read from their
+        # hardpoints, and the name gives no size.
+        named = {}
+        for g in guns:
+            named.setdefault(g["name"], set()).add(g.get("size"))
+        sizes = {n: s.pop() for n, s in named.items() if len(s) == 1}
+        unsure = set(named) - set(sizes)
         classes = {g["class_name"]: (g["name"], g.get("size")) for g in guns if g.get("class_name")}
         racks = {}  # by uuid (ship hardpoints) and class name (missile turrets name their rack's class)
         for r in _items("MissileLauncher"):
@@ -62,7 +74,14 @@ def refresh(db, now=None, force=False):
         while True:
             d = _get(WIKI.format(page))
             # Each vehicle has ~77 fields (~60 KB); keep the few we use so a refresh stays well inside the memory cap.
-            wiki += [{**{k: v.get(k) for k in KEEP}, "weapons": weapons(v, sizes, classes, racks)} for v in d["data"]]
+            for v in d["data"]:
+                arms = weapons(v, sizes, classes, racks)
+                if v.get("uuid") and (_misfiled(v, unsure) or arms and _missiles_short(arms)):
+                    entry = _hardpoints(v, cached, reach)
+                    if entry:
+                        ports[v["uuid"]] = entry
+                        arms = weapons(v, sizes, classes, racks, entry[1])
+                wiki.append({**{k: v.get(k) for k in KEEP}, "weapons": arms})
             del d["data"]
             if page >= d["meta"]["last_page"]:
                 break
@@ -79,8 +98,8 @@ def refresh(db, now=None, force=False):
     with db:
         db.execute("DELETE FROM ingame")
         db.executemany("INSERT OR REPLACE INTO ingame VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
-        db.execute("INSERT INTO state (key, value) VALUES ('ingame_at', ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(now),))
+        db.executemany("INSERT INTO state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                       (("ingame_at", json.dumps(now)), ("ingame_ports", json.dumps(ports))))
     log.info("in-game data: %d ships from the wiki, %d buy and %d rent prices", len(rows), len(buys), len(rents))
 
 
@@ -138,7 +157,124 @@ def _rack(r):
     return r["missile_rack"].get("missile_count") or 0, r["missile_rack"].get("missile_size"), kind
 
 
-def weapons(v, sizes, classes, racks):
+TURRET_PORTS = {"Remote Turrets": "remote", "Manned Turrets": "manned", "PDC Turrets": "pdc"}
+
+
+def _misfiled(v, unsure=frozenset()):
+    """Could the wiki's weapon summary have this ship's guns in the wrong place? Yes when its turret lists don't match
+    the turret hardpoints that have something fitted, or a gun sits straight on the hull (a spine beam). About 90
+    ships, most of them fine (a remote turret holding a tractor beam); the rest of the fleet matches its hardpoints.
+    Also yes when it carries a gun whose name doesn't say its size (unsure), so the hardpoint can."""
+    w = v.get("weaponry")
+    if not w:
+        return False
+    t, top = v.get("turrets") or {}, [p for p in v.get("ports") or [] if p.get("equipped_item_uuid")]
+    names = {g.get("name") for g in (w.get("fixed_weapons") or {}).get("weapons") or []}
+    names |= {g.get("name") for m in t.values() for x in m or [] for g in x.get("weapons") or []}
+    return (any(sum(p.get("category_label") == c for p in top) != len(t.get(m) or []) for c, m in TURRET_PORTS.items())
+            or any(p.get("type") == "WeaponGun" for p in top) or bool(names & unsure))
+
+
+def _missiles_short(arms):
+    """Do the racks we can see from the vehicle list hold a different number of missiles than the wiki counts? Racks
+    inside turrets and pods (Nova, Storm AA, Ballista) and bombs (A1 Spirit) aren't visible there."""
+    return sum(n for n, _, _ in arms["missiles"]) != arms["missileCount"]
+
+
+def _hardpoints(v, cached, reach):
+    """[game version, by_hardpoint()] for one ship: from the cache while the game version is the same, else from the
+    wiki. After one failed read the rest of this refresh doesn't try (reach), so a wiki outage can't hold up the store
+    checks; those ships keep their cached entry (with its old version, so it's read again next time), else None and
+    the wiki's summary until tomorrow."""
+    hit = cached.get(v["uuid"])
+    if hit and hit[0] == v.get("version"):
+        return hit
+    if reach["ok"]:
+        try:
+            d = _get(VEHICLE.format(v["uuid"]))["data"]
+            time.sleep(SHIP_PAUSE)
+            return [v.get("version"), by_hardpoint(d, v.get("turrets") or {})]
+        except Exception as e:
+            reach["ok"] = False
+            log.warning("couldn't read %s's hardpoints, using cached or summary weapons: %s", v.get("name"), e)
+    return hit
+
+
+def _gun(item):
+    """A gun's figures from its item record. A beam has no shots, so no alpha, and the wiki gives no sustained DPS."""
+    d = (item.get("vehicle_weapon") or {}).get("damage") or {}
+    dps = d.get("burst") or sum((d.get("dps") or {}).values())
+    return {"name": item.get("name"), "size": item.get("size"), "dps": dps,
+            "sustained_dps": d.get("sustained_60s") or 0, "alpha": d.get("alpha_total") or 0}
+
+
+MISSILE_KINDS = {"Ship.Missile.Torpedo": "torpedo", "Ship.Missile.Rocket": "rocket", "Ship.Bomb": "bomb"}
+
+
+def by_hardpoint(detail, turrets):
+    """Every gun on the ship sorted by the hardpoint it sits on, in the shapes weapons() reads:
+    {"fixed": [gun], "turrets": {"manned"|"remote"|"pdc": [turret]}, "missiles": [[count, size, kind]]}, the
+    missiles being every one fitted, wherever its rack is. A turret the wiki lists keeps its entry (who
+    can fire it, missile racks) with the guns actually in it; a hardpoint's own category (Remote/Manned/PDC Turrets)
+    beats the list the wiki put it in. Turret hardpoints and door guns the wiki doesn't list become crewed turrets; any
+    other gun is the pilot's."""
+    listed = {x["hardpoint_name"]: (m, x) for m in ("manned", "remote", "pdc") for x in turrets.get(m) or []
+              if x.get("hardpoint_name")}
+    fixed, out = [], {"manned": [], "remote": [], "pdc": []}
+
+    def item(p):
+        return p.get("equipped_item") if isinstance(p.get("equipped_item"), dict) else {}
+
+    def children(p):
+        return (p.get("ports") or []) + (item(p).get("ports") or [])
+
+    def guns_in(p):
+        it = item(p)
+        if it.get("type") == "WeaponGun":
+            return [_gun(it)] if (it.get("classification") or "").startswith("Ship.Weapon") else []
+        return [g for c in children(p) for g in guns_in(c)]
+
+    def turret(x, guns):
+        return {"is_pilot_slaveable": x.get("is_pilot_slaveable"), "weapons": guns,
+                "weapon_sizes": x.get("weapon_sizes") or [g["size"] for g in guns],
+                "payload_class_names": x.get("payload_class_names") or [], "payload_types": x.get("payload_types") or []}
+
+    def visit(p, cat, top):
+        name = p.get("name")
+        if name in listed and item(p).get("type") != "WeaponGun":
+            m, x = listed.pop(name)
+            guns = guns_in(p)
+            out[TURRET_PORTS.get(cat, m)].append(turret(x, guns) if guns else turret(x, x.get("weapons") or []))
+        elif (top and cat in TURRET_PORTS) or item(p).get("type") == "WeaponMount":  # WeaponMount: a crew door gun
+            guns = guns_in(p)
+            if guns:  # else a camera, a tractor beam or nothing fitted
+                out[TURRET_PORTS.get(cat, "manned")].append(turret({}, guns))
+        elif item(p).get("type") == "WeaponGun":
+            fixed.extend(guns_in(p))
+        else:
+            for c in children(p):
+                visit(c, cat, False)
+
+    missiles = {}
+
+    def ordnance(p):
+        it = item(p)
+        if it.get("type") in ("Missile", "Bomb"):
+            key = (it.get("size") or None, MISSILE_KINDS.get(it.get("classification"), "missile"))
+            missiles[key] = missiles.get(key, 0) + 1
+        for c in children(p):
+            ordnance(c)
+
+    for p in detail.get("ports") or []:
+        visit(p, p.get("category_label"), True)
+        ordnance(p)
+    for m, x in listed.values():  # turrets the wiki lists on a hardpoint it doesn't show: kept as they are
+        out[m].append(turret(x, x.get("weapons") or []))
+    return {"fixed": fixed, "turrets": out,
+            "missiles": [[n, size, kind] for (size, kind), n in sorted(missiles.items(), key=lambda x: -(x[0][0] or 0))]}
+
+
+def weapons(v, sizes, classes, racks, sorted_=None):
     """Every gun and missile turret on the ship's stock loadout, grouped by who fires it, plus its missiles:
     {"guns": [[who, mount, how many mounts, [[count, size, gun]] per mount, DPS, sustained DPS, alpha]],
      "pilot": [DPS, sustained, alpha], "missiles": [[count, size, kind]], "missileCount"}.
@@ -147,16 +283,20 @@ def weapons(v, sizes, classes, racks):
     A missile turret's guns are its missiles ([[8, 2, "missiles"]], or [[1, 4, "missile rack"]] when the wiki doesn't
     list the rack) and its damage is 0, as is a gun the wiki names on a turret but has no figures for (Mauler's S9
     beam). Tractor beams and turrets with nothing fitted are left out. The wiki's own pilot DPS isn't used: on some
-    ships (Polaris) it counts a crewed turret. None when the wiki has no weapon data."""
+    ships (Polaris) it counts a crewed turret. sorted_ (by_hardpoint()) replaces the wiki's gun lists when the ship
+    was re-read from its hardpoints. None when the wiki has no weapon data."""
     w, t = v.get("weaponry"), v.get("turrets") or {}
     if not w:
         return None
+    fixed = (w.get("fixed_weapons") or {}).get("weapons") or []
+    if sorted_ is not None:
+        fixed, t = sorted_["fixed"], sorted_["turrets"]
 
     def kit(guns, fallback=()):
         """[[count, size, name]], most first; sizes from the gun list, else the mount's."""
         out = {}
         for i, g in enumerate(guns):
-            size = sizes.get(g.get("name")) or (fallback[i] if i < len(fallback) else None)
+            size = g.get("size") or sizes.get(g.get("name")) or (fallback[i] if i < len(fallback) else None)
             out[(size, g.get("name") or "?")] = out.get((size, g.get("name") or "?"), 0) + 1
         return [[n, size, name] for (size, name), n in sorted(out.items(), key=lambda x: (-(x[0][0] or 0), x[0][1]))]
 
@@ -164,7 +304,6 @@ def weapons(v, sizes, classes, racks):
         return [sum(g.get(k) or 0 for g in guns) for k in ("dps", "sustained_dps", "alpha")]
 
     rows, missiles = {}, {}
-    fixed = (w.get("fixed_weapons") or {}).get("weapons") or []
     if fixed:
         rows[("pilot", "hardpoints", "")] = [1, kit(fixed), damage(fixed)]
     for mount in ("manned", "remote", "pdc"):
@@ -198,6 +337,8 @@ def weapons(v, sizes, classes, racks):
         if rack and rack[0]:
             missiles[rack[1:]] = missiles.get(rack[1:], 0) + rack[0]
     pilot = [sum(r[i] for r in guns if r[0] in ("pilot", "both")) for i in (4, 5, 6)]
+    if sorted_ is not None and sorted_.get("missiles") is not None:  # what's fitted, not what the racks could hold
+        missiles = {(size, kind): n for n, size, kind in sorted_["missiles"]}
     return {"guns": guns, "pilot": pilot,
             "missiles": [[n, size, kind] for (size, kind), n in sorted(missiles.items(), key=lambda x: -(x[0][0] or 0))],
             "missileCount": (w.get("missiles") or {}).get("count") or 0}

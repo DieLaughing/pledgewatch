@@ -1,4 +1,5 @@
-from pw.ingame import build_rows, history, weapons
+from pw import ingame
+from pw.ingame import build_rows, by_hardpoint, history, weapons
 
 
 def test_history_keeps_standalone_store_and_upgrade_rows():
@@ -79,3 +80,94 @@ def test_weapons_list_every_gun_by_who_fires_it():
                  ["auto", "pdc", 1, [[1, 1, "Swarm"]], 160, 80, 16]],
         "pilot": [2960, 1480, 296], "missiles": [[24, 2, "missile"]], "missileCount": 16}
     assert weapons({"weaponry": None}, sizes, classes, racks) is None
+
+
+def _port(name, cat=None, item=None, ports=None):
+    return {"name": name, "category_label": cat, "equipped_item": item, "ports": ports}
+
+
+def _gun(name, size, burst, sustained=None, alpha=None, dps=None):
+    return {"type": "WeaponGun", "classification": "Ship.Weapon.Gun", "name": name, "size": size,
+            "vehicle_weapon": {"damage": {"burst": burst, "sustained_60s": sustained, "alpha_total": alpha,
+                                          "dps": dps or {}}}}
+
+
+def _mount(name, cat, *guns, kind="Turret"):
+    return _port(name, cat, {"type": kind}, [_port(f"gun{i}", None, g) for i, g in enumerate(guns)])
+
+
+def test_guns_are_sorted_by_the_hardpoint_they_sit_on():
+    """Tiburon: the wiki's summary has the remote turrets' cannons as the pilot's and no spine beam."""
+    cannon = _gun("C-07T Cannon", 7, 2683.3, 2077.4, 4600)
+    beam = _gun("Supremacy-10T Laser Beam", 10, None, dps={"energy": 18000})
+    rhino = _gun("CF-447 Rhino Repeater", 4, 817.9, 414.5, 65.4)
+    tractor = {"type": "WeaponGun", "classification": "Ship.UtilityWeapon.TractorBeam", "name": "Tractor"}
+    detail = {"ports": [
+        _port("hardpoint_weapon", "Weapons", beam),
+        *[_mount(f"hardpoint_turret_{i}", "Remote Turrets", cannon) for i in range(4)],
+        _mount("turret_rear", "Manned Turrets", rhino, rhino),
+        _mount("tractor_turret", "Remote Turrets", tractor),  # a tractor beam: left out
+        _port("hardpoint_rear", "Other", {"type": "AttachedPart"},  # MDC: the wiki's PDC sits inside a module
+              [_mount("hardpoint_mdc_pdc", None, _gun("Torrent", 1, 360, 285, 18))]),
+        _mount("hardpoint_door", "Other", _gun("YellowJacket", 1, 403, 338, 15), kind="WeaponMount"),
+        _port("pod", "Turrets", {"type": "MissileLauncher"},  # missiles count as fitted, wherever the rack is
+              [_port(f"m{i}", None, {"type": "Missile", "size": 3, "classification": "Ship.Missile.Missile"})
+               for i in range(2)] + [_port("r", None, {"type": "Missile", "size": 0,
+                                                       "classification": "Ship.Missile.Rocket"})]),
+    ]}
+    listed = {"manned": [{"hardpoint_name": "turret_rear", "is_pilot_slaveable": False, "weapon_sizes": [4, 4],
+                          "weapons": [{"name": "CF-447 Rhino Repeater"}] * 2}],
+              "pdc": [{"hardpoint_name": "hardpoint_mdc_pdc", "weapons": []}],
+              "remote": [{"hardpoint_name": "torpedo_camera", "payload_class_names": ["RACK"],
+                          "payload_types": ["MissileLauncher.MissileRack"]}]}  # not on a hardpoint: kept
+    s = by_hardpoint(detail, listed)
+    assert s["fixed"] == [{"name": "Supremacy-10T Laser Beam", "size": 10, "dps": 18000, "sustained_dps": 0, "alpha": 0}]
+    v = {"weaponry": {"fixed_weapons": {"weapons": [{"name": "C-07T Cannon", "dps": 2683.3}] * 4}}, "turrets": listed}
+    w = weapons(v, {}, {}, {"RACK": (8, 3, "missile")}, s)
+    assert w["guns"] == [["pilot", "hardpoints", 1, [[1, 10, "Supremacy-10T Laser Beam"]], 18000, 0, 0],
+                         ["gunner", "remote", 4, [[1, 7, "C-07T Cannon"]], 10733, 8310, 18400],
+                         ["gunner", "manned", 1, [[2, 4, "CF-447 Rhino Repeater"]], 1636, 829, 131],
+                         ["gunner", "manned", 1, [[1, 1, "YellowJacket"]], 403, 338, 15],
+                         ["gunner", "remote-missile", 1, [[8, 3, "missiles"]], 0, 0, 0],
+                         ["auto", "pdc", 1, [[1, 1, "Torrent"]], 360, 285, 18]]
+    assert w["pilot"] == [18000, 0, 0]
+    assert w["missiles"] == [[2, 3, "missile"], [1, None, "rocket"]]
+
+
+def test_a_hardpoints_own_turret_category_beats_the_wikis_list():
+    """Liberator: point defence the wiki lists nowhere; a turret it lists as manned that is really remote."""
+    swarm = _gun("Swarm", 1, 166, 74, 10)
+    detail = {"ports": [_mount("pdt", "PDC Turrets", swarm), _mount("top", "Remote Turrets", swarm)]}
+    s = by_hardpoint(detail, {"manned": [{"hardpoint_name": "top", "is_pilot_slaveable": True}]})
+    assert [len(s["turrets"][m]) for m in ("manned", "remote", "pdc")] == [0, 1, 1]
+    assert s["turrets"]["remote"][0]["is_pilot_slaveable"] is True
+
+
+def test_only_ships_the_summary_may_have_wrong_are_reread():
+    port = lambda cat, typ="Turret": {"category_label": cat, "type": typ, "equipped_item_uuid": "x"}
+    ok = {"weaponry": {"fixed_weapons": {"weapons": [{"name": "M5A"}]}}, "ports": [port("Remote Turrets")],
+          "turrets": {"remote": [{"weapons": [{"name": "M5A"}]}]}}
+    assert not ingame._misfiled(ok)
+    assert ingame._misfiled({**ok, "turrets": {}})  # a remote turret the wiki doesn't list
+    assert ingame._misfiled({**ok, "ports": ok["ports"] + [port("Weapons", "WeaponGun")]})  # a gun on the hull
+    assert ingame._misfiled(ok, unsure={"M5A"})  # the gun's name covers several sizes
+    assert not ingame._misfiled({"weaponry": None})
+
+
+def test_hardpoints_are_cached_per_game_version_and_one_failure_stops_reads(monkeypatch):
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        if "bad" in url:
+            raise OSError("wiki down")
+        return {"data": {"ports": []}}
+    monkeypatch.setattr(ingame, "_get", get)
+    monkeypatch.setattr(ingame, "SHIP_PAUSE", 0)
+    cached, reach = {"a": ["4.3", "old sort"], "b": ["4.2", "stale"]}, {"ok": True}
+    assert ingame._hardpoints({"uuid": "a", "version": "4.3"}, cached, reach) == ["4.3", "old sort"]
+    assert ingame._hardpoints({"uuid": "c", "version": "4.3"}, cached, reach)[1]["fixed"] == []
+    assert ingame._hardpoints({"uuid": "bad", "version": "4.3"}, cached, reach) is None
+    # not read while the wiki is down, and kept under its old version so it's read again on the next refresh
+    assert ingame._hardpoints({"uuid": "b", "version": "4.3"}, cached, reach) == ["4.2", "stale"]
+    assert len(calls) == 2

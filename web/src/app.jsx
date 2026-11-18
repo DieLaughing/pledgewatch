@@ -454,7 +454,7 @@ const MOUNT = {
   "manned-missile": "crewed missile turret", "remote-missile": "remote missile turret",
 };
 const WHO = [["pilot", "Pilot"], ["both", "Pilot or gunner"], ["gunner", "Gunners"], ["auto", "Automatic"]];
-const MISSILE = { missile: ["missile", "missiles"], torpedo: ["torpedo", "torpedoes"], bomb: ["bomb", "bombs"] };
+const MISSILE = { missile: ["missile", "missiles"], torpedo: ["torpedo", "torpedoes"], bomb: ["bomb", "bombs"], rocket: ["rocket", "rockets"] };
 const num = (n) => (n ? n.toLocaleString("en-US") : "–");
 // The three damage figures as one line, for narrow screens where they don't fit as columns.
 const Stats = ({ d }) => (d[0] ? <span class="stats-inline"><b>{num(d[0])}</b> DPS · <b>{num(d[1])}</b> sustained · <b>{num(d[2])}</b> alpha</span> : null);
@@ -545,13 +545,14 @@ function Details({ s, rate, version }) {
           {w.missiles.length ? (
             <dl class="facts arms-facts">
               <dt>Missiles</dt>
-              <dd>{w.missiles.map(([n, size, kind]) => `${n}× S${size} ${MISSILE[kind][n === 1 ? 0 : 1]}`).join(" · ")}</dd>
+              <dd>{w.missiles.map(([n, size, kind]) => `${n}× ${size ? `S${size} ` : ""}${(MISSILE[kind] || MISSILE.missile)[n === 1 ? 0 : 1]}`).join(" · ")}</dd>
             </dl>
           ) : null}
           <p class="muted small">
             <b>DPS</b> is damage a second while firing, <b>sustained</b> is the average once heat and reloads catch up,
             and <b>alpha</b> is one volley from every gun on the line. Stock loadout{version ? ` in game version ${version}` : ""},
             from the Star Citizen Wiki.
+            {w.guns.some((r) => r[4] && !r[5] && !r[6]) ? " A beam fires nonstop, so it has no alpha, and the wiki gives no sustained figure for it." : ""}
           </p>
         </section>
       ) : null}

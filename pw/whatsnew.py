@@ -3,6 +3,15 @@ Add an entry here with each user-facing release; the header shows a dot until a 
 import html
 
 ENTRIES = [
+    ("2026-11-18", [
+        "Fixed weapons on about 20 ships where the wiki's summary counted turret guns as the pilot's. The Tiburon's "
+        "pilot now has its S10 laser beam and the four C-07T cannons sit in remote turrets. Pilot firepower is lower "
+        "but correct on the Corsair, Constellation Mk V Centaurus, Hull B and C, Valkyrie, Zeus Mk II, Prowler, Shiv, "
+        "Apollo, A1 Spirit, Hermes, Starlite and Nova, and the Liberator's point defence turrets are no longer pilot guns.",
+        "Fixed missile counts that left out racks inside turrets and pods and bombs (Nova, Storm AA, Ballista, A1 "
+        "Spirit, Polaris, Super Hornets, Starlancer TAC and others). Rockets are listed too.",
+        "Fixed a few gun sizes (F7C Hornet Wildfire, F8C Lightning Executive, Javelin).",
+    ]),
     ("2026-11-13", [
         "Modular ships (Galaxy, Aurora Mk II): a new Modules row lists the modules sold on their own and the ship + "
         "module packs, so the packs no longer crowd the price boxes.",
